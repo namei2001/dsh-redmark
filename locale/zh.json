@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-redmark（会话书签）",
+    "description": "为长对话中的关键轮次和文本片段添加书签，可靠跳回；兼容旧版 Session Bookmarks 数据。"
+  }
+}

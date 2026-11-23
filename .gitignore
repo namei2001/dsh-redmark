@@ -1,0 +1,38 @@
+# Git ignore rules for the dsh-redmark bundle
+
+# Dependencies / build artifacts
+node_modules/
+dist/
+build/
+*.tgz
+*.zip
+
+# Local environment & secrets (this bundle reads no API keys, but keep the
+# convention so a future .env is never committed)
+.env
+.env.*
+!.env.example
+
+# Runtime data written by the Host. Live copies live under %USERPROFILE%\.dsh
+# (or $DSH_HOME), outside the repo; these patterns guard against accidental
+# local test data landing in the tree.
+dsh-redmark.json
+dsh-redmark-trace.log
+session-bookmarks.json
+session-bookmarks-trace.log
+*.trace.log
+*.jsonl
+settings.json
+layout.json
+
+# Logs & editor / OS noise
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Developer scratch backups of client.js produced during tuning rounds
+client.js.bak*

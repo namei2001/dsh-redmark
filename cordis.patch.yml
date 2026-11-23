@@ -1,0 +1,4 @@
+- insert:
+    - id: dsh-redmark
+      name: '@local/dsh-redmark'
+      config: {}

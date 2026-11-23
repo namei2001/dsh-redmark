@@ -1,0 +1,37 @@
+{
+  "name": "@local/dsh-redmark",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "description": "dsh-redmark — bookmark turns and text ranges in long DSH conversations and jump back reliably.",
+  "license": "MIT",
+  "author": "namei2001",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/namei2001/dsh-redmark.git"
+  },
+  "homepage": "https://github.com/namei2001/dsh-redmark#readme",
+  "bugs": "https://github.com/namei2001/dsh-redmark/issues",
+  "keywords": ["deepseek-harness", "dsh", "cordis", "bookmarks", "session"],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  }
+}
