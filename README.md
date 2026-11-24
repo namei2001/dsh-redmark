@@ -1,8 +1,12 @@
-# dsh-redmark（会话书签 / Session Bookmarks）
+# dsh-redmark
 
-> 在长对话中为关键轮次添加书签与自定义备注，并从专用面板一键跳回。
-> 这是一个 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 的 **Cordis Web 插件包（bundle）**，不是独立的 Python / Web 服务。
-> 本项目原名 `@local/session-bookmarks`（Session Bookmarks），自 **v4.0.0** 起更名为 `dsh-redmark`，并**自动兼容旧数据**。
+> Bookmark key turns in a long conversation with custom notes, and jump back to
+> them from a dedicated panel.
+>
+> A **Cordis web bundle** for [the agent runtime (DSH)](https://github.com/deepseek-ai/deepseek-harness) —
+> not a standalone Python or web service.
+
+[English](README.md) · [中文](README.zh-CN.md)
 
 [![CI](https://github.com/namei2001/dsh-redmark/actions/workflows/ci.yml/badge.svg)](https://github.com/namei2001/dsh-redmark/actions)
 ![Version](https://img.shields.io/badge/version-4.0.0-blue)
@@ -10,49 +14,54 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-DSH%20Web%20Bundle-orange)
 
-## 目录
+## Table of contents
 
-- [它解决什么问题](#它解决什么问题)
-- [功能一览](#功能一览)
-- [安装与启用](#安装与启用)
-- [从旧版升级（数据兼容）](#从旧版升级数据兼容)
-- [快速上手](#快速上手)
-- [项目结构（含标准模板对照）](#项目结构含标准模板对照)
-- [跳回与跟随守卫：优化历程](#跳回与跟随守卫优化历程)
-- [数据与隐私](#数据与隐私)
-- [诊断与排障](#诊断与排障)
-- [开发命令](#开发命令)
-- [常见问题](#常见问题)
-- [安全](#安全)
-- [许可证](#许可证)
+- [The problem it solves](#the-problem-it-solves)
+- [Features](#features)
+- [Install & enable](#install--enable)
+- [Quick start](#quick-start)
+- [Project structure](#project-structure)
+- [Jump-back & follow-tail guard: optimization history](#jump-back--follow-tail-guard-optimization-history)
+- [Data & privacy](#data--privacy)
+- [Diagnostics & troubleshooting](#diagnostics--troubleshooting)
+- [Development commands](#development-commands)
+- [FAQ](#faq)
+- [Security](#security)
+- [License](#license)
 
-## 它解决什么问题
+## The problem it solves
 
-长对话滚动成百上千行后，想回到之前某一轮：手动翻找既慢又容易丢失位置。dsh-redmark 让你：
+Once a conversation scrolls to hundreds or thousands of lines, finding an earlier
+turn by hand is slow and makes you lose your place. dsh-redmark lets you:
 
-1. 给任意助手回复或选中文本打上书签 + 备注；
-2. 从侧栏、右栏标签或会话头部的按钮，随时跳回那一轮；
-3. 用 `Ctrl/Cmd+F` 在当前会话内查找，并复用同一套精准定位机制跳转。
+1. Bookmark any assistant reply or text selection with a custom note;
+2. Jump back to that turn from the sidebar panel, a right-side tab, or a header
+   utility button;
+3. Search within the current conversation with `Ctrl/Cmd+F`, using the same
+   precise landing mechanism.
 
-同时，它修复了一个长期困扰的跟随问题：**流式回复时视图悄悄停止跟随尾部、滑回自己上一条消息**——这背后是 DSH 滚动锚点与书签触发器的布局耦合，详见[优化历程](#跳回与跟随守卫优化历程)。
+It also fixes a long-standing follow problem: **while a reply streams, the view
+silently stops following the tail and slides back to your own last message**.
+That comes from a layout coupling between DSH's scroll anchors and the bookmark
+trigger — see the [optimization history](#jump-back--follow-tail-guard-optimization-history).
 
-## 功能一览
+## Features
 
-| 功能 | 说明 |
+| Feature | Description |
 | --- | --- |
-| 轮次书签 | 在消息工具栏（order 40）为助手回复打点，记录 `turn` / `seq` / 备注 |
-| 文本区间书签 | 基于 CSS Custom Highlight API 高亮选区，保存 quote、偏移、前后文 |
-| 专用书签面板 | `sidebar.panellist` + 主面板 + 右栏标签，多入口打开 |
-| 精准跳回 | 复用 DSH 自身滚动锚点（Plan C）与 TurnNavigator 导航轨，不写伪造滚动事件 |
-| 会话内查找 | `Ctrl/Cmd+F` 捕获阶段快捷键，不抢占输入框，支持高亮与逐步导航 |
-| 跟随守卫 | 窄条件修复“无意图掉跟随”，尊重读者主动滚动，带 200 次修复上限 |
-| 尽力持久化 | `localStorage` 为主，Host `/dsh-redmark` 端点做可选 JSON 镜像 |
-| 旧数据兼容 | 自动迁移旧版 `dsh.session-bookmarks.*` 键与 `session-bookmarks.json` 镜像 |
-| 结构化诊断 | 跳转/守卫指标写入 `dsh-redmark-trace.log`，1 MiB 自动轮转 |
+| Turn bookmarks | Bookmark an assistant reply from its message toolbar (order 40); stores `turn` / `seq` / note |
+| Text-range bookmarks | Highlight a selection via the CSS Custom Highlight API; stores quote, offsets, and prefix/suffix context |
+| Dedicated panel | `sidebar.panellist` + main panel + right-side tab, multiple entry points |
+| Precise jump-back | Reuses DSH's own scroll anchors (Plan C) and the TurnNavigator rail — never writes synthetic scroll events |
+| Find in conversation | `Ctrl/Cmd+F` capture-phase shortcut that never steals keystrokes from input fields; highlighted, step-wise navigation |
+| Follow-tail guard | Repairs intentless pin drops under narrow conditions, respects deliberate reader scrolling, capped at 200 repairs |
+| Best-effort persistence | `localStorage` as primary store; optional JSON mirror through the Host `/dsh-redmark` route |
+| Structured diagnostics | Jump/guard metrics written to `dsh-redmark-trace.log`, with 1 MiB rotation |
 
-## 安装与启用
+## Install & enable
 
-本仓库是 DSH 的本地 Cordis bundle，零 npm 依赖。`package.json` 关键字段：
+This repository is a local DSH Cordis bundle with zero npm dependencies. Key
+`package.json` fields:
 
 ```json
 {
@@ -70,18 +79,22 @@
 }
 ```
 
-- `cordis.patch.yml` 向 DSH 插入 `id: dsh-redmark` / `name: '@local/dsh-redmark'`。
-- `immediately: true` 表示 Web 端在会话界面加载时立即注入。
-- `client.js` 通过 `window.__ModuleLoader__.load({ id, factory })` 装载；React / React-DOM 由宿主提供。
+- `cordis.patch.yml` inserts `id: dsh-redmark` / `name: '@local/dsh-redmark'` into DSH.
+- `immediately: true` injects the web client as soon as the conversation UI loads.
+- `client.js` is loaded via `window.__ModuleLoader__.load({ id, factory })`; React
+  and React-DOM are provided by the host.
 
-**本地开发安装（目录联接 / junction）**：把仓库放在工作区后，在 profile 中建立一个指向它的目录联接，DSH 重载即可生效，无需复制安装。开发机上已配置好的联接为：
+**Local development install (directory junction).** Place the repository in your
+workspace, create a directory junction in the profile pointing at it, then reload
+DSH — no copying needed. On the development machine the junction is configured as:
 
 ```text
 C:\Users\EDY\.dsh\profiles\desktop\node_modules\@local\dsh-redmark
   → C:\Users\EDY\Documents\deepseek-harness\default-workspace\dsh-redmark
 ```
 
-如需在另一台机器上重建（把路径替换为你的实际仓库位置，以管理员权限打开 PowerShell）：
+To recreate it on another machine (replace the paths with your actual repository
+location; open PowerShell as Administrator):
 
 ```powershell
 $repo = "C:\Users\EDY\Documents\deepseek-harness\default-workspace\dsh-redmark"
@@ -90,120 +103,141 @@ New-Item -ItemType Directory -Force (Split-Path $link)
 cmd /c mklink /J "$link" "$repo"
 ```
 
-随后在 DSH 中重新加载该 bundle（或重启 DSH）即可。
+Then reload the bundle in DSH (or restart DSH) for it to take effect.
 
-## 从旧版升级（数据兼容）
+## Quick start
 
-v4.0.0 完成了从 Session Bookmarks 到 dsh-redmark 的**完整改名**，同时保证老用户数据不丢失：
+1. **Bookmark**: hover an assistant message in a long conversation and click the
+   bookmark action in its toolbar (or select text and use the selection menu),
+   then enter a note and save (≤ 2000 chars; max 500 per session).
+2. **Open the panel**: use the header utility button, the panel list in the
+   sidebar, or the `dsh-redmark` tab on the right side.
+3. **Jump back**: click any bookmark. The engine reuses DSH's navigation rail and
+   scroll anchors, pages in older history when needed, and lands precisely on
+   the target turn.
+4. **Find**: focus the transcript and press `Ctrl/Cmd+F` to open the find bar;
+   matching turns are highlighted and navigable step by step.
+5. **Export / recover**: the authoritative copy lives in browser `localStorage`;
+   if the Host route is available it is also mirrored to
+   `%USERPROFILE%\.dsh\dsh-redmark.json` (or `<DSH_HOME>`).
 
-- 插件 id：`@local/session-bookmarks` → `@local/dsh-redmark`（bundle 插入 id `session-bookmarks` → `dsh-redmark`）。
-- Web 路由：`/session-bookmarks` → `/dsh-redmark`。
-- localStorage 键：`dsh.session-bookmarks.<sessionId>` → `dsh.dsh-redmark.<sessionId>`。
-- 镜像文件：`session-bookmarks.json` → `dsh-redmark.json`；诊断日志 → `dsh-redmark-trace.log`。
+## Project structure
 
-升级步骤：先移除旧的 `@local/session-bookmarks` bundle，安装本仓库版本，然后重载 DSH。首次读取时：
+This is a **JS ESM DSH bundle**, so Python-specific template entries are adapted
+to the DSH ecosystem (`pyproject.toml` → `package.json`,
+`src/your_package/` → root-level `index.js` / `client.js`):
 
-- Web 半若发现新键无数据，会读取旧 `dsh.session-bookmarks.*` 键，清洗后写入新键并镜像（`store: migrated legacy key ...`），**旧键保留不删除**；
-- Host 半在 `dsh-redmark.json` 不存在时，会加载旧的 `session-bookmarks.json` 作为镜像。
-
-因此书签不会因改名而丢失。
-
-## 快速上手
-
-1. **打点**：在长对话中悬停某条助手消息，点击工具栏的书签按钮（或选中文本后用选区菜单），填写备注并保存（备注 ≤ 2000 字，每会话最多 500 条）。
-2. **查看**：点击会话头部的书签按钮、侧栏面板列表中的「dsh-redmark / 会话书签」，或右栏的 `dsh-redmark` 标签打开面板。
-3. **跳回**：点击任一条书签，引擎会复用 DSH 的导航轨和滚动锚点，必要时自动加载更早的历史并精确定位到目标轮次。
-4. **查找**：聚焦对话后按 `Ctrl/Cmd+F` 打开查找栏，命中的轮次会被高亮，可逐步导航。
-5. **导出/恢复**：书签主副本在浏览器 `localStorage`；若 Host 端点可用，还会镜像到 `%USERPROFILE%\.dsh\dsh-redmark.json`（或 `<DSH_HOME>`）。
-
-## 项目结构（含标准模板对照）
-
-本项目是 **JS ESM 的 DSH bundle**，因此 Python 专属条目按 DSH 生态做了等价适配（`pyproject.toml` → `package.json`，`src/your_package/` → 根目录的 `index.js` / `client.js`）：
-
-| 模板条目 | 本项目 | 说明 |
+| Template entry | This project | Notes |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | ✅ `.github/workflows/ci.yml` | checkout@v4 + setup-node@20，跑结构检查与测试 |
-| `docs/` | ✅ `docs/architecture.md`、`docs/usage.md` | 架构（含跳回机制）与使用/排障文档 |
-| `scripts/` | ✅ `scripts/check-bundle.js` | 零依赖清单校验器：文件齐全、manifest 正确、JS 可解析 |
-| `src/your_package/` | ✅ `index.js` + `client.js` | Host 半 / Web 半两个入口（DSH bundle 布局） |
-| `tests/` | ✅ `test/bundle.test.js`、`test/README.md` | 7 个 `node:test` 用例，守护 bundle 结构契约与旧数据迁移 |
-| `.env.example` | ✅ `.env.example` | 仅列 `DSH_HOME` 等目录变量，**无密钥** |
-| `.gitignore` | ✅ `.gitignore` | 忽略运行时 JSON/日志、`.env`、`client.js.bak*` 等 |
-| `CHANGELOG.md` | ✅ `CHANGELOG.md` | Keep a Changelog + SemVer，记录优化轮次与改名 |
-| `CONTRIBUTING.md` | ✅ `CONTRIBUTING.md` | 开发、守卫修改准则、提交卫生 |
+| `.github/workflows/ci.yml` | ✅ `.github/workflows/ci.yml` | checkout@v4 + setup-node@20; runs structure check and tests |
+| `docs/` | ✅ `docs/architecture.md`, `docs/usage.md` | Architecture (incl. jump-back) and usage/troubleshooting docs |
+| `scripts/` | ✅ `scripts/check-bundle.js` | Zero-dependency manifest validator: files present, manifest correct, JS parseable |
+| `src/your_package/` | ✅ `index.js` + `client.js` | Host half / Web half entry points (DSH bundle layout) |
+| `tests/` | ✅ `test/bundle.test.js`, `test/README.md` | 7 `node:test` cases guarding the bundle's structural contract |
+| `.env.example` | ✅ `.env.example` | Directory variables only (`DSH_HOME` etc.), **no secrets** |
+| `.gitignore` | ✅ `.gitignore` | Ignores runtime JSON/logs, `.env`, `client.js.bak*` |
+| `CHANGELOG.md` | ✅ `CHANGELOG.md` | Keep a Changelog + SemVer, records optimization rounds |
+| `CONTRIBUTING.md` | ✅ `CONTRIBUTING.md` | Development, guard-modification rules, commit hygiene |
 | `LICENSE` | ✅ `LICENSE` | MIT |
-| `README.md` | ✅ 本文件 | 项目门面 |
-| `pyproject.toml` | ♻️ `package.json` | DSH bundle 清单（name/version/exports/files/dsh） |
-| `Dockerfile` | ⭕ 不适用 | 插件运行于 DSH 桌面进程内，无独立容器 |
+| `README.md` | ✅ this file | English entry point; `README.zh-CN.md` is the Chinese edition |
+| `pyproject.toml` | ♻️ `package.json` | DSH bundle manifest (name/version/exports/files/dsh) |
+| `Dockerfile` | ⭕ N/A | The plugin runs inside the DSH desktop process; no container |
 
-附加的 bundle 运行文件：`cordis.patch.yml`、`icon.svg`、`locale/en.json`、`locale/zh.json`。
+Additional bundle runtime files: `cordis.patch.yml`, `icon.svg`,
+`locale/en.json`, `locale/zh.json`.
 
-唯一与 Python 模板**不同**的是：本项目的“源码”不在 `src/` 子目录，而是按 Cordis 约定放在根目录（Host 与 Web 两个入口），并且没有 `Dockerfile`（插件不独立部署）。
+The only differences from the Python template: the "source" lives at the repo
+root (two entry points, Host and Web) per Cordis convention rather than under
+`src/`, and there is no `Dockerfile` because the plugin is not deployed
+standalone.
 
-## 跳回与跟随守卫：优化历程
+## Jump-back & follow-tail guard: optimization history
 
-这部分是本项目经历多轮优化的核心，诊断证据保存在
-`%USERPROFILE%\.dsh\dsh-redmark-trace.log`（另有早期轮次备份 `.bak-*` 与旧名 `session-bookmarks-trace.log.bak-20261123-121150`）。
+This is the core of the project's many tuning rounds. Diagnostic evidence lives
+at `%USERPROFILE%\.dsh\dsh-redmark-trace.log` (plus `.bak-*` rotation backups).
 
-**问题一：视图悄悄停止跟随尾部。** 流式回复时 `scrollHeight` 增长，而书签触发器挂载时的布局变化被 DSH 判定为“读者滚动”，于是 `followingTail` 被丢弃，视图滑回用户上一条消息。
+**Problem 1: the view silently stops following the tail.** While a reply streams
+and `scrollHeight` grows, the layout change from mounting the bookmark trigger
+is interpreted by DSH as "reader scrolled", so `followingTail` is dropped and
+the view slides back to your last message.
 
-- 实测：书签按钮若以 slot 盒挂载进滚动流，每次挂载增加 32–96 px，超过 DSH 的 24 px 跟随容差。修复：把触发器放进工具栏**已预留的 28 px 行**，作为 flex item，不再撑高对话。
-- 修复：`startFollowGuard()` 仅在**窄条件全满足**时才重新固定：锚点曾开后关、700 ms 内无读者意图、接近尾部（`gap<600`）、冷却 >1.2 s、且无跳转进行中（`jumpInFlight=false`）。读者主动滚动（`intentless=false`）一律不修复。
-- 刻意不做的：不按 gap 修复（空闲固定视图因输入区折叠本就有 ~240 px gap）；不要求 streaming（掉跟随常在挂载后 0.62 s 出现）；修复上限 200 次，超出后不再干预直至重载。
+- Measured: mounting the trigger as a slot box inside the scroll flow added
+  32–96 px per mount, exceeding DSH's 24 px follow tolerance. Fix: mount the
+  trigger as a flex item in the toolbar's **already-reserved 28 px row**, so it
+  no longer grows the transcript.
+- Guard: `startFollowGuard()` re-pins only when **all** narrow conditions hold —
+  the anchor was on then off, no reader intent within 700 ms, near the tail
+  (`gap < 600`), cooldown > 1.2 s, and no jump in flight (`jumpInFlight=false`).
+  Deliberate reader scrolling (`intentless=false`) is never repaired.
+- Deliberately avoided: no gap-based repair (an idle pinned view already has a
+  ~240 px gap from the collapsed input area); no streaming requirement (the pin
+  drop commonly appears 0.62 s after mount); a 200-repair cap, after which the
+  guard stays pass-through until reload.
 
-**问题二：跨轮跳转不准 / 抖动。**
+**Problem 2: cross-turn jumps were inaccurate / flickered.**
 
-- `railTurnOf` 改为读取 `aria-label` 的**末尾数字**——本地化标签里可能含别的数字，整体匹配会让所有跨轮跳转失效。
-- 通过 React fiber 找到 `TurnNavigator` 的 `onNavigate(item)` 直接调用，不再点击/滚动导航轨（两个写入源导致抖动）；`jumpViaRail` 全程占用 `jumpInFlight`，避免并发 re-pin 取消 DSH 的待处理跳转。
-- `jumpToTurn` 优先 DSH 自身滚动锚点（Plan C，`save(null)` 回到底部、`save(position)` 固定），仅在无 rail 句柄时回退旧分页器；必要时分页加载最多 240 页，再以 48 探针二分滚动视口精准落位。
+- `railTurnOf` now reads the **trailing number** of the rail item's
+  `aria-label` — localized labels may contain another digit, and matching the
+  whole label broke every cross-turn jump.
+- The `TurnNavigator`'s `onNavigate(item)` is resolved through the React fiber
+  and called directly; the rail is never clicked or scrolled (two writers caused
+  flicker). `jumpViaRail` holds `jumpInFlight` for the whole request so a
+  concurrent re-pin cannot cancel DSH's pending navigation.
+- `jumpToTurn` prefers DSH's own scroll anchors (Plan C: `save(null)` to return
+  to the tail, `save(position)` to pin), falling back to the legacy pager only
+  when no rail handle exists; it pages in up to 240 pages when necessary, then
+  bisects the scrollport with 48 probes to land precisely.
 
-**诊断样例**（摘自真实 trace，说明机制已生效）：
+**Sample diagnostics** (from a real trace, showing the mechanism at work):
 
 ```
-guard: arm growth=0 bm=4 spots=4,-715 rows=431 pinned=true   ← 挂载不撑高
-guard drop: gap=300 intentless=true nearTail=true ...        ← 无意图掉跟随
-guard: re-pin after intentless drop (gap=300 restore#1)      ← 窄条件修复
-reveal align ok=true turn=63 before=... after=...            ← 跳转对齐正确
+guard: arm growth=0 bm=4 spots=4,-715 rows=431 pinned=true   <- mount does not grow the view
+guard drop: gap=300 intentless=true nearTail=true ...        <- intentless pin drop
+guard: re-pin after intentless drop (gap=300 restore#1)      <- narrow-condition repair
+reveal align ok=true turn=63 before=... after=...            <- correct jump alignment
 ```
 
-完整机制与判据见 [docs/architecture.md](docs/architecture.md)。
+See [docs/architecture.md](docs/architecture.md) for the full mechanism and
+criteria.
 
-## 数据与隐私
+## Data & privacy
 
-| 数据 | 位置 | 性质 |
+| Data | Location | Nature |
 | --- | --- | --- |
-| 书签主副本 | 浏览器 `localStorage`：`dsh.dsh-redmark.<sessionId>` | 按会话隔离，权威数据 |
-| 旧版主副本（迁移） | 浏览器 `localStorage`：`dsh.session-bookmarks.<sessionId>` | 首次读取时迁移到新键，旧键保留 |
-| 持久化镜像 | `%USERPROFILE%\.dsh\dsh-redmark.json`（或 `$DSH_HOME`） | 尽力而为，16 MiB 上限；端点不可用也能用 |
-| 旧版镜像（迁移） | `%USERPROFILE%\.dsh\session-bookmarks.json` | 新镜像不存在时加载 |
-| 诊断日志 | `%USERPROFILE%\.dsh\dsh-redmark-trace.log` | 仅结构化指标，1 MiB 轮转 |
-| 恢复备份 | `.erased-*`、`*.corrupt`、`*.bak-*` | 擦除/损坏时保护数据 |
+| Bookmark store (authoritative) | browser `localStorage` key `dsh.dsh-redmark.<sessionId>` | Per-session, authoritative |
+| Durability mirror | `%USERPROFILE%\.dsh\dsh-redmark.json` (or `$DSH_HOME`) | Best-effort, 16 MiB cap; works even if the route is unavailable |
+| Diagnostic log | `%USERPROFILE%\.dsh\dsh-redmark-trace.log` | Structural metrics only, 1 MiB rotation |
+| Recovery backups | `.erased-*`, `*.corrupt`, `*.bak-*` | Protection against erase/corruption |
 
-- 插件**不读取任何 API Key**，数据只发往同源的 `/dsh-redmark` 路由。
-- 宿主端点严格 best-effort：`apply()` 时若 `webServer` 不可用，记录 `dsh-redmark: webServer unavailable, durability mirror disabled` 并继续以 `localStorage` 工作。
-- 写入采用临时文件 + `rename` 原子持久化；解析失败改名为 `*.corrupt`，不静默清空。
+- The plugin **reads no API keys** and sends data only to its own same-origin
+  `/dsh-redmark` route.
+- The Host endpoint is strictly best-effort: if `webServer` is unavailable at
+  apply time, it logs `dsh-redmark: webServer unavailable, durability mirror
+  disabled` and keeps working from `localStorage`.
+- Writes use a temporary file + `rename` for atomic persistence; a parse
+  failure renames the file to `*.corrupt` rather than silently clearing it.
 
-## 诊断与排障
+## Diagnostics & troubleshooting
 
-查看最近日志（完整命令，可直接复制）：
+View recent log lines (copy-paste ready):
 
 ```powershell
 Get-Content "$env:USERPROFILE\.dsh\dsh-redmark-trace.log" -Tail 120
 ```
 
-| 现象 | 看 trace 里的关键字段 | 处理 |
+| Symptom | Key trace fields | Action |
 | --- | --- | --- |
-| 跳转不准 | `reveal align ok=false` / `no-landing` | 确认 rail 句柄存在、未切换会话 |
-| 又出现滑动回退 | `guard drop` 中 `intentless=false` | 属读者主动滚动，守卫正确放行，无需处理 |
-| 反复重固定 | 出现 `guard: repair cap reached (200)` | 已自动停止干预，重载 DSH 复位 |
-| 镜像未生效 | 日志无 route / `durable=false` | 仅影响跨浏览器恢复，`localStorage` 仍可用 |
-| 升级后书签“不见了” | 搜索 `store: migrated legacy key` | 迁移已发生；如未出现，检查旧键/旧镜像是否被清除 |
+| Inaccurate jump | `reveal align ok=false` / `no-landing` | Check that a rail handle exists and the session was not switched |
+| Sliding back again | `intentless=false` in `guard drop` | A deliberate reader scroll — the guard correctly stands down; no action needed |
+| Repeated re-pinning | `guard: repair cap reached (200)` | Intervention already stopped automatically; reload DSH to reset |
+| Mirror not working | No route in log / `durable=false` | Only affects cross-browser recovery; `localStorage` still works |
 
-详见 [docs/usage.md](docs/usage.md) 的“读取诊断日志”。
+See [docs/usage.md](docs/usage.md), "Reading the diagnostic trace", for details.
 
-## 开发命令
+## Development commands
 
-本环境 Node 不一定在 `PATH`，使用内置 Node（v24.x）。以下命令均可直接复制粘贴（路径按开发机实际值）：
+Node may not be on `PATH` in the DSH environment; use the bundled Node (v24.x).
+These commands are copy-paste ready (adjust paths for your machine):
 
 ```powershell
 $node = "C:\Users\EDY\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
@@ -215,38 +249,45 @@ $proj = "C:\Users\EDY\Documents\deepseek-harness\default-workspace\dsh-redmark"
 & $node --test --experimental-test-isolation=none "$proj\test\bundle.test.js"
 ```
 
-预期输出：
+Expected output:
 
 ```
 Bundle check OK: @local/dsh-redmark@4.0.0
 # 7 tests passed
 ```
 
-> `--experimental-test-isolation=none` 仅 DSH 沙箱需要：默认测试隔离的子进程 spawn 会被沙箱以 `Error: spawn EPERM` 拒绝。普通 CI（`node --test test/*.test.js`）不需要该参数。
+> `--experimental-test-isolation=none` is only needed inside the DSH sandbox,
+> where the default test-isolation subprocess spawn is rejected with
+> `Error: spawn EPERM`. Plain CI (`node --test test/*.test.js`) does not need it.
 
-CI（GitHub Actions, Node 20）在推送/PR 时自动执行 `scripts/check-bundle.js` 与 `node --test test/*.test.js`。
+CI (GitHub Actions, Node 20) runs `scripts/check-bundle.js` and
+`node --test test/*.test.js` on every push and pull request.
 
-## 常见问题
+## FAQ
 
-**Q：dsh-redmark 和 Session Bookmarks 是什么关系？**
-A：同一个项目。v4.0.0 起从 `@local/session-bookmarks` 更名为 `@local/dsh-redmark`，并完成路由、存储键、镜像文件与日志的统一改名；旧数据会自动迁移，不会丢失。（另有 `dsh-unread-mark` 是红点未读插件，属于不同项目。）
+**Q: Why no `pyproject.toml` / `src/` / `Dockerfile`?**
+A: This is a DSH Cordis **JS bundle**, not a Python service. The equivalents are
+`package.json` and root-level `index.js` / `client.js`; the plugin runs inside
+the DSH desktop process and needs no container.
 
-**Q：为什么没有 `pyproject.toml` / `src/` / `Dockerfile`？**
-A：这是 DSH Cordis **JS bundle**，不是 Python 服务。等价物是 `package.json`、根目录 `index.js`/`client.js`；插件运行在 DSH 桌面进程内，不需要容器。
+**Q: Will deleting the trace log lose bookmarks?**
+A: No. Bookmarks live in `localStorage` (plus the optional JSON mirror); the log
+is for diagnostics only.
 
-**Q：删了 trace 日志会丢书签吗？**
-A：不会。书签在 `localStorage`（+ 可选 JSON 镜像），日志只用于诊断。
+**Q: Will bookmarks survive a browser switch?**
+A: `localStorage` does not cross browsers. If the Host route is available the
+JSON mirror can help recover them — do not treat the JSON as the only copy.
 
-**Q：换浏览器后书签还在吗？**
-A：`localStorage` 不跨浏览器；若 Host 端点可用，镜像 JSON 可辅助恢复。不要把 JSON 当作唯一副本。
+## Security
 
-## 安全
+- `.env.example` contains directory variables only; never put secrets in it.
+- The route verifies same-origin (`sec-fetch-site` / `origin`); records are
+  sanitized server-side, with length caps on notes and text.
+- Diagnostics swallow all failures and never interrupt functionality; the log
+  contains no conversation text or secrets.
+- Do not commit `dsh-redmark.json`, trace logs, `.env`, or `client.js.bak*`
+  (covered by `.gitignore`).
 
-- `.env.example` 只含目录变量，禁止填入任何密钥。
-- 路由做同源校验（`sec-fetch-site` / `origin`）；记录服务端清洗，备注/文本有长度上限。
-- 诊断 swallow 所有失败，绝不因日志中断功能；日志不含对话正文或密钥。
-- 不要在仓库提交 `dsh-redmark.json`、旧 `session-bookmarks.json`、trace 日志、`.env` 或 `client.js.bak*`（`.gitignore` 已覆盖）。
+## License
 
-## 许可证
-
-MIT — 见 [LICENSE](LICENSE)。
+MIT — see [LICENSE](LICENSE).

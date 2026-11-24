@@ -1,7 +1,7 @@
 # Contributing to dsh-redmark
 
-Thanks for helping improve dsh-redmark (formerly *Session Bookmarks*). This
-bundle plugs into [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+Thanks for helping improve dsh-redmark. This
+bundle plugs into [the agent runtime (DSH)](https://github.com/deepseek-ai/deepseek-harness)
 via its Cordis web-bundle API, so a few conventions matter.
 
 ## Development setup
@@ -37,8 +37,7 @@ registration in `try/catch` so one missing slot never disables the rest.
 `index.js` registers a best-effort `/dsh-redmark` webServer prefix route.
 It must never become a hard dependency: if the route is unavailable the Web half
 still works from `localStorage`. Preserve the sanitization, erase protection,
-write-failure (`507`) behavior, and the legacy `session-bookmarks.json` fallback
-when changing the handler/loader.
+and write-failure (`507`) behavior when changing the handler/loader.
 
 ## Jump-back / follow-tail guard
 
@@ -54,9 +53,10 @@ changing `startFollowGuard`, `jumpViaRail`, `railTurnOf`, or `jumpToTurn`:
 
 ## Commit hygiene
 
-- Do not commit runtime data (`dsh-redmark.json`, `dsh-redmark-trace.log`,
-  legacy `session-bookmarks*.json`/`.log`), `.env`, or `client.js.bak*` backups.
+- Do not commit runtime data (`dsh-redmark.json`, `dsh-redmark-trace.log`),
+  `.env`, or `client.js.bak*` backups.
 - Update `CHANGELOG.md` for behavior changes.
-- Keep the README in sync when adding a slot, command, or config key.
+- Keep `README.md` and `README.zh-CN.md` in sync when adding a slot, command,
+  or config key.
 - The bundle id, route, and storage prefix are a contract with installed users:
-  never rename them without a legacy migration path.
+  keep them stable.

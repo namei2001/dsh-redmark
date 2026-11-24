@@ -3,19 +3,15 @@
 ## Install / enable
 
 dsh-redmark is installed as a DSH Cordis bundle. When developing from this
-workspace it is linked into the desktop profile (after the rename the link uses
-the new `@local/dsh-redmark` id and `dsh-redmark` folder — see the README for
-the exact junction path). The profile entry is a directory junction, so edits to
-the workspace take effect after a DSH reload.
+workspace it is linked into the desktop profile under the `@local/dsh-redmark`
+id and `dsh-redmark` folder — see the README for the exact junction path. The
+profile entry is a directory junction, so edits to the workspace take effect
+after a DSH reload.
 
 For a fresh install, load the project folder as a local bundle.
 `cordis.patch.yml` inserts `id: dsh-redmark` / `name: '@local/dsh-redmark'`, and
 `package.json` requests immediate Web client load with
 `inject: ["@deepseek-ai/dsh-client-ui-conversation"]`.
-
-Upgrading from `@local/session-bookmarks`: remove the old bundle first, install
-this one, and reload DSH. Existing bookmarks are adopted automatically — see
-[Data and privacy](#data-and-privacy).
 
 ## Add a bookmark
 
@@ -53,9 +49,9 @@ and navigable with next/previous.
 | Item | Location | Purpose |
 | --- | --- | --- |
 | Bookmark store (primary) | browser `localStorage` key `dsh.dsh-redmark.<sessionId>` | Authoritative, per-session bookmarks |
-| Legacy store (migrated) | browser `localStorage` key `dsh.session-bookmarks.<sessionId>` | Read and copied forward on first use; left intact |
+| Legacy store (adopted) | an older `dsh.*.<sessionId>` localStorage key | Adopted and copied forward on first use; left intact |
 | Durability mirror | `%USERPROFILE%\.dsh\dsh-redmark.json` (or `<DSH_HOME>/...`) | Best-effort JSON mirror; 16 MiB cap |
-| Legacy mirror (migrated) | `%USERPROFILE%\.dsh\session-bookmarks.json` | Loaded when no `dsh-redmark.json` exists |
+| Legacy mirror (adopted) | an older `.dsh\*.json` mirror file | Loaded when `dsh-redmark.json` is absent |
 | Diagnostic trace | `%USERPROFILE%\.dsh\dsh-redmark-trace.log` | Structured jump/guard metrics; 1 MiB rotation |
 | Erase backup | `<DSH_HOME>/dsh-redmark*.erased-*`, `*.corrupt`, `*.bak-*` | Recovery on erase/corruption |
 
@@ -103,9 +99,8 @@ paint: session=... painted=0 missing=0 supported=true
 ```
 
 These confirm find/range scanning, turn alignment (`align ok=true`), step
-navigation, and highlight painting. A backup of earlier tuning rounds is kept
-next to the live log (`dsh-redmark-trace.log.bak-*`, and the legacy
-`session-bookmarks-trace.log.bak-20261123-121150`).
+navigation, and highlight painting. Backups of earlier tuning rounds are kept
+next to the live log as `dsh-redmark-trace.log.bak-*`.
 
 ## Verification commands
 

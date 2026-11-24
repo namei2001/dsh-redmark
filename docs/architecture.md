@@ -1,6 +1,6 @@
 # Architecture
 
-dsh-redmark (formerly Session Bookmarks) is a DSH **Cordis web bundle**: a plain-ESM plugin with two
+dsh-redmark is a DSH **Cordis web bundle**: a plain-ESM plugin with two
 halves that load into different runtimes. It deliberately has **no npm
 dependencies**; React/React-DOM are supplied by the host.
 
@@ -52,11 +52,11 @@ inject = ['slots','locale','layout','uiWorkspace','sidebarRightTabs','sidebarRig
   with an in-memory `Map` cache, a `subscribe`/`notify` listener set, and a
   `sanitize(list)` pass that drops malformed records, deduplicates ids, and caps
   the list at `MAX_LIST = 500`.
-- **Upgrade compatibility**: on first read, bookmarks under the legacy
-  `dsh.session-bookmarks.<sessionId>` key are adopted and copied forward to the
-  new key (the legacy copy is left intact). The all-sessions page scans both
-  prefixes, and the Host loads a legacy `session-bookmarks.json` mirror when no
-  `dsh-redmark.json` exists. No bookmarks are lost by the rename.
+- **Legacy-data compatibility**: on first read, bookmarks stored under an older
+  localStorage key are adopted and copied forward to `dsh.dsh-redmark.<sessionId>`
+  (the old copy is left intact). The all-sessions page scans both prefixes, and
+  the Host loads an older mirror file when `dsh-redmark.json` is absent, so no
+  existing bookmarks are lost.
 - `writeStore(sessionId, list, explicit)` mirrors to the Host endpoint; an empty
   list is only mirrored when `explicit === true`. Failed mirrors are retried by
   `flushMirror` on a 15 s interval.

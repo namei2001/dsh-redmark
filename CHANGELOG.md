@@ -7,32 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.0.0] - 2026-11-23 — dsh-redmark
 
-First public GitHub release under the new name `dsh-redmark` (formerly
-`@local/session-bookmarks`). Branding, runtime identifiers, storage keys, route,
-and the on-disk mirror file are renamed consistently.
+First public GitHub release of `dsh-redmark`: a DSH Cordis web bundle for
+bookmarking turns in long conversations and jumping back to them precisely.
 
 ### Added
-- **Legacy-data compatibility**: bookmarks saved by `@local/session-bookmarks`
-  are adopted automatically — legacy localStorage keys (`dsh.session-bookmarks.*`)
-  are read and copied forward on first read, and a legacy `session-bookmarks.json`
-  mirror file is loaded when no `dsh-redmark.json` exists. No bookmarks are lost
-  by the upgrade.
 - Standard project scaffolding adapted to a DSH Cordis web bundle:
   `.github/workflows/ci.yml`, `scripts/check-bundle.js`, `test/bundle.test.js`,
   `.gitignore`, `.env.example`, `LICENSE`, `CONTRIBUTING.md`, and `docs/`.
 - Repository metadata (`repository`, `homepage`, `bugs`, `keywords`, `license`,
   `author`) pointing at https://github.com/namei2001/dsh-redmark.
-- This `README.md` as the single entry point: features, install, template
-  mapping, data/privacy, diagnostics, and development commands.
+- Bilingual entry points: English `README.md` and Chinese `README.zh-CN.md`
+  covering features, install, template mapping, data/privacy, diagnostics, and
+  development commands.
 
 ### Changed
-- Package id `@local/session-bookmarks` → `@local/dsh-redmark`; bundle insertion
-  id `session-bookmarks` → `dsh-redmark`.
-- Web route `/session-bookmarks` → `/dsh-redmark`; mirror file
-  `session-bookmarks.json` → `dsh-redmark.json`; trace log
-  `session-bookmarks-trace.log` → `dsh-redmark-trace.log`.
-- localStorage prefix `dsh.session-bookmarks.` → `dsh.dsh-redmark.`; panel,
-  right-bar tab, slot ids and UI locale namespace carried the new name.
+- Consolidated runtime identifiers: package id `@local/dsh-redmark`, bundle id
+  `dsh-redmark`, web route `/dsh-redmark`, mirror `dsh-redmark.json`, trace log
+  `dsh-redmark-trace.log`, and localStorage prefix `dsh.dsh-redmark.`.
 
 ## [3.1.6] - 2026-11-23
 
@@ -76,8 +67,7 @@ and the on-disk mirror file are renamed consistently.
 ### Added
 - Plan C anchor integration: reuse DSH's own `chatScroll` save/read anchors and
   `returnToBottom()` via React fiber. No synthetic scroll positions or events.
-- Structured diagnostic trace mirrored to `session-bookmarks-trace.log`
-  (renamed to `dsh-redmark-trace.log` in 4.0.0).
+- Structured diagnostic trace mirrored to `dsh-redmark-trace.log`.
 
 ## [3.0.0] - 2026-11-23
 

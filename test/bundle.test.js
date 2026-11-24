@@ -62,7 +62,7 @@ test('client half registers the panel, slots and jump-back machinery', () => {
   assert.match(src, /anchorStore/)
 })
 
-test('legacy Session Bookmarks data is migrated, not dropped', () => {
+test('legacy localStorage keys and mirror files are adopted, not dropped', () => {
   const client = read('client.js')
   assert.match(client, /LEGACY_STORE_PREFIX = 'dsh\.session-bookmarks\.'/)
   assert.match(client, /LEGACY_ENDPOINT = '\/session-bookmarks'/)
