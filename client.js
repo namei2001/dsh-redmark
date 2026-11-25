@@ -3423,14 +3423,40 @@ const ICON_PATHS = {
      * the same turn whose text no longer contains the quote (observed:
      * `quote text not found in node ... key=14:assistant-step17:93`). So when the
      * saved key misses, every node of that turn is searched for the quote. */
+    /* A stored `nodeKey` looks like `14:assistant-step68:76`: a context prefix,
+     * a kind+step (`assistant-step68`), and a per-render suffix. The suffix (and
+     * sometimes the prefix) drifts when the reply re-renders, but the kind+step
+     * stays put. This returns that stable segment so the text fallback can
+     * prefer the same step instead of matching a short quote in the wrong node
+     * (a turn holds a reasoning node AND an answer node that can share text). */
+    function nodeStepOf(nodeKey) {
+      if (typeof nodeKey !== 'string') return null
+      const m = nodeKey.match(/[A-Za-z][A-Za-z0-9_-]*\d+/) // e.g. assistant-step68
+      return m ? m[0] : null
+    }
+
     function findQuoteInTurn(bm, sessionId) {
       let rows = null
       try { rows = qa(TURN_ROW_SELECTOR, sessionId) } catch { return null }
       if (rows === null) return null
       const wanted = String(bm.turn)
+      const step = nodeStepOf(bm && bm.nodeKey)
       for (const row of Array.from(rows)) {
         if (row.getAttribute('data-chat-turn') !== wanted) continue
-        for (const el of Array.from(row.querySelectorAll('[data-chat-node-key]'))) {
+        const nodes = Array.from(row.querySelectorAll('[data-chat-node-key]'))
+        /* Pass 1: only nodes of the same kind+step as the stored key. A text
+           bookmark points at one assistant step; matching a short quote against
+           the turn's other nodes (reasoning, process) lands on the wrong
+           paragraph. */
+        if (step) {
+          for (const el of nodes) {
+            if ((el.getAttribute('data-chat-node-key') || '').indexOf(step) < 0) continue
+            const range = quoteRange(el, bm)
+            if (range !== null) return { el, range }
+          }
+        }
+        /* Pass 2: any node (the quote may have drifted into a re-keyed node). */
+        for (const el of nodes) {
           const range = quoteRange(el, bm)
           if (range !== null) return { el, range }
         }
@@ -3495,13 +3521,24 @@ const ICON_PATHS = {
       if (!bm || bm.kind !== 'text' || typeof bm.quote !== 'string') return null
       const needle = bm.quote.trim().split('\n')[0].trim().slice(0, 60)
       if (needle === '') return null
+      const step = nodeStepOf(bm && bm.nodeKey)
       try {
         for (const row of Array.from(qa(TURN_ROW_SELECTOR, sessionId))) {
           const text = row.textContent || ''
           if (text.indexOf(needle) < 0) continue
           /* Prefer the narrowest node that actually holds the passage, so the
-             reader lands on the paragraph rather than the top of the Turn. */
-          for (const el of Array.from(row.querySelectorAll('[data-chat-node-key]'))) {
+             reader lands on the paragraph rather than the top of the Turn. Try
+             the same kind+step node first so a short quote does not settle on a
+             sibling reasoning/process node that happens to share the text. */
+          const nodes = Array.from(row.querySelectorAll('[data-chat-node-key]'))
+          if (step) {
+            for (const el of nodes) {
+              if ((el.getAttribute('data-chat-node-key') || '').indexOf(step) < 0) continue
+              const range = quoteRange(el, bm)
+              if (range !== null) return { row, range }
+            }
+          }
+          for (const el of nodes) {
             const range = quoteRange(el, bm)
             if (range !== null) return { row, range }
           }

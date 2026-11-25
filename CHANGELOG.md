@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.4] - 2026-11-25
+
+### Fixed
+- Text bookmarks no longer land on the wrong paragraph when the stored node key
+  has drifted. A stored key like `14:assistant-step68:76` keeps its kind+step
+  (`assistant-step68`) even after a re-render mints a new suffix, so the text
+  fallback (`findQuoteInTurn` / `locateQuoteByText`) now resolves that stable
+  segment and tries the same step's node first. A short quote that also appears
+  in a turn's reasoning/process node no longer settles there first.
+
 ## [4.0.3] - 2026-11-25
 
 ### Fixed
