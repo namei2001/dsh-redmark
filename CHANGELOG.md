@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.8] - 2026-11-25
+
+### Fixed
+- Every jump failed with `[no-scroller]` because the session-scope lookup never
+  worked. `sessionRoot()` concatenated the attribute name and its value
+  OUTSIDE the brackets — `[data-conversation-session]` + `="<id>"` — building an
+  invalid selector; `querySelector` threw, the surrounding `catch` swallowed the
+  error, and the function returned `null` for every session, including the one
+  already on screen. Since 4.0.5 made that `null` authoritative instead of
+  falling back to `document`, the failure became total: the jump refused to run
+  against any conversation. The selector is now built as
+  `[data-conversation-session="<id>"]`.
+- The `sessions` service is declared in the client `inject` list. Without it the
+  session snapshot (and therefore `openState`) was never readable, which is why
+  the 4.0.7 wait logged `openState=unavailable`.
+
 ## [4.0.7] - 2026-11-25
 
 ### Fixed

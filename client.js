@@ -581,7 +581,12 @@ window.__ModuleLoader__.load({
       if (sessionId) {
         const escaped = String(sessionId).replace(/["\\]/g, '\\$&')
         try {
-          const root = document.querySelector(SESSION_CONTENT_SELECTOR + '="' + escaped + '"')
+          /* The attribute value belongs INSIDE the brackets:
+             `[data-conversation-session="<id>"]`. Appending `="<id>"` after the
+             already-closed `[...]` builds an invalid selector, `querySelector`
+             threw, the catch swallowed it, and this lookup returned null for
+             EVERY session — including the one on screen. */
+          const root = document.querySelector('[data-conversation-session="' + escaped + '"]')
           if (root) return root
         } catch { /* fall through */ }
         /* The named session is not mounted (it may still be switching in after
@@ -3626,9 +3631,15 @@ const ICON_PATHS = {
       }
       {
         const snap = sessionSnapshot(sessionId)
+        let mounted = []
+        try {
+          mounted = Array.from(document.querySelectorAll(SESSION_CONTENT_SELECTOR))
+            .map(node => String(node.getAttribute('data-conversation-session') || ''))
+        } catch { mounted = [] }
         traceForce('jump: root gate openState=' + String(snap ? snap.openState : 'unavailable')
           + ' flow=' + (q(CHAT_FLOW_SELECTOR, sessionId) !== null)
-          + ' root=' + (sessionRoot(sessionId) !== null))
+          + ' root=' + (sessionRoot(sessionId) !== null)
+          + ' mounted=' + mounted.join('|'))
       }
       const isText = Boolean(bm && bm.kind === 'text' && bm.nodeKey)
       let res = await jumpToTurn(turn, sessionId, seq, isText ? false : true)
@@ -4265,7 +4276,7 @@ body[data-ds-dark-theme] .dsh-bm-pop{background-color:rgba(46,49,58,.5);backgrou
     /* plugin                                                             */
     /* ------------------------------------------------------------------ */
 
-    const inject = ['slots', 'locale', 'layout', 'uiWorkspace', 'sidebarRightTabs', 'sidebarRight']
+    const inject = ['slots', 'locale', 'layout', 'uiWorkspace', 'sidebarRightTabs', 'sidebarRight', 'sessions']
 
     function apply(ctx) {
       try { detectLang(ctx.locale.getLocale()) } catch { lang = 'en' }
