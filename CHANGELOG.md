@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.9] - 2026-11-25
+
+### Fixed
+- A text bookmark in a long conversation needed about ten clicks to reach its
+  passage. The walk that centres the quoted paragraph was capped at twelve
+  one-screen steps, so each click advanced exactly twelve screens
+  (`scrollTop` 96401 → 84493 → … → 13045 in the trace) and a passage a hundred
+  screens up never came into view. The cap is gone: `centrePassage()` now walks
+  while it keeps making progress, bounded by wall-clock time and by a stall
+  detector (eight steps with no movement means the scrollport is clamped, not
+  slow).
+- The success toast lied. `jumpToTurn()` reported success as soon as the Turn's
+  row was in the DOM, and the passage pass ran afterwards, so the toast said
+  "already jumped to that Turn" while the quoted paragraph was still far below.
+  The passage walk now owns the verdict: a failed walk downgrades the toast to
+  the "the quoted part is not loaded yet" message.
+- Paging and walking are alternated up to four times instead of tried once. A
+  single Turn of a huge transcript is itself dozens of screens tall, and its
+  earlier sub-rows only exist after history has been paged that far, so when the
+  passage is still missing after a walk DSH's own navigation
+  (`navigateToTurn` → `loadThrough(seq)`) is asked to page through that Turn
+  again.
+
 ## [4.0.8] - 2026-11-25
 
 ### Fixed

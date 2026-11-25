@@ -1850,31 +1850,22 @@ window.__ModuleLoader__.load({
       let quoteOk = true
       let landedByQuote = false
       if (bm && bm.kind === 'text' && bm.nodeKey) {
-        const el = await revealQuotedNode(bm, sessionId)
-        if (el === null) {
+        const seen = await revealQuotedNode(bm, sessionId)
+        if (seen === null) {
           const found = locateQuoteByText(bm, sessionId)
           if (found !== null) {
             const scroller = findScroller(sessionId)
             if (scroller !== null) {
-              const viewport = scroller.clientHeight || 600
-              for (let step = 0; step < 10; step += 1) {
-                if (centerOn(scroller, found.row, viewport) === 'ok') break
-                await frame()
+              if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
+              const anchorBefore = readAnchor(sessionId)
+              const walk = await centrePassage(bm, sessionId, 20000)
+              if (anchorBefore !== undefined) {
+                restoreAnchor(sessionId, anchorBefore)
+                setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
               }
-              if (found.range !== null) {
-                if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
-                const anchorBefore = readAnchor(sessionId)
-                let outcome = centerQuoteRange(scroller, found.range, viewport)
-                for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
-                  await frame()
-                  outcome = centerQuoteRange(scroller, found.range, viewport)
-                }
-                if (anchorBefore !== undefined) {
-                  restoreAnchor(sessionId, anchorBefore)
-                  setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
-                }
-                traceForce('jump: quote centred by text ok=' + (outcome === 'ok') + ' turn=' + String(bm.turn))
-              }
+              traceForce('jump: quote centred by text ok=' + walk.ok + ' reason=' + String(walk.reason || '-')
+                + ' steps=' + walk.steps + ' turn=' + String(bm.turn))
+              if (!walk.ok) quoteOk = false
               landedByQuote = true
             }
           } else {
@@ -1883,6 +1874,7 @@ window.__ModuleLoader__.load({
           }
         } else {
           landedByQuote = true
+          if (seen.walkOk === false) quoteOk = false
         }
         const paint = paintHighlights(sessionId)
         if (paint && paint.missing) {
@@ -3487,6 +3479,211 @@ const ICON_PATHS = {
       return m ? m[0] : null
     }
 
+    /* The numeric part of that step (`assistant-step68` -> 68). */
+    function stepNumberOf(nodeKey) {
+      if (typeof nodeKey !== 'string') return null
+      const m = nodeKey.match(/step(\d+)/i)
+      if (!m) return null
+      const n = Number(m[1])
+      return Number.isSafeInteger(n) ? n : null
+    }
+
+    /* Every painted, keyed node that belongs to one Turn, in DOM order. A Turn
+     * is not one box: each assistant step is its own `data-chat-node-key` row,
+     * and the virtualiser keeps only a window of them mounted. The union of
+     * those rects is therefore the only reliable direction signal while the
+     * quoted passage itself is outside the mounted window. */
+    function paintedTurnNodes(turn, sessionId) {
+      let nodes = null
+      try { nodes = qa('[data-chat-node-key]', sessionId) } catch { return [] }
+      if (nodes === null) return []
+      const wanted = String(turn)
+      const out = []
+      for (const el of Array.from(nodes)) {
+        if (el.offsetParent === null) continue
+        let rect = null
+        try { rect = el.getBoundingClientRect() } catch { continue }
+        if (rect === null || rect.height <= 0) continue
+        let owner = null
+        try { owner = el.closest(TURN_ROW_SELECTOR) } catch { owner = null }
+        if (owner === null || owner.getAttribute('data-chat-turn') !== wanted) continue
+        out.push({ el, rect, key: el.getAttribute('data-chat-node-key') || '' })
+      }
+      return out
+    }
+
+    /* Resolve the quoted passage against the LIVE DOM. A Range captured before
+     * a scroll write goes stale as soon as the virtualiser recycles its row
+     * (zero rect = 'lost'), so every walk step re-resolves instead of reusing
+     * the previous handle. `byText` records that the exact node key missed and
+     * the passage was matched by its text within the turn; `reason`
+     * 'text-missing' means the node is mounted but no longer holds the quote. */
+    function passageRange(bm, sessionId) {
+      if (!bm || !bm.nodeKey) return null
+      const el = nodeElByKey(sessionId, bm.nodeKey)
+      if (el) {
+        const range = quoteRange(el, bm)
+        if (range !== null) return { el, range, byText: false, reason: null }
+      }
+      const found = findQuoteInTurn(bm, sessionId)
+      if (found !== null) return { el: found.el, range: found.range, byText: true, reason: null }
+      return el ? { el, range: null, byText: false, reason: 'text-missing' } : null
+    }
+
+    /* Which way the passage lies, judged from the parts of its Turn that ARE
+     * painted. Returns -1 (passage is above), +1 (below) or 0 (we are already
+     * inside the right region and must wait for it to paint).
+     *
+     * Why not simply centre the Turn row: DSH's own rail landing parks the START
+     * of the Turn at the top of the viewport, and a Turn of a large session can
+     * be a hundred screens tall, so centring the row walks backwards to the
+     * Turn's opening message -- the exact "lands on the question, not the
+     * quoted answer" complaint. Steering by the painted step nodes moves through
+     * the Turn instead. */
+    function directionTowardPassage(scroller, bm, sessionId, targetStep) {
+      let box = null
+      try { box = scroller.getBoundingClientRect() } catch { box = null }
+      if (box === null) return 0
+      const nodes = paintedTurnNodes(bm.turn, sessionId)
+      if (nodes.length > 0) {
+        let top = Infinity
+        let bottom = -Infinity
+        let lowest = null
+        let highest = null
+        for (const node of nodes) {
+          if (node.rect.top < top) top = node.rect.top
+          if (node.rect.bottom > bottom) bottom = node.rect.bottom
+          const step = stepNumberOf(node.key)
+          if (step === null) continue
+          if (lowest === null || step < lowest) lowest = step
+          if (highest === null || step > highest) highest = step
+        }
+        if (bottom < box.top + 2) return -1
+        if (top > box.bottom - 2) return 1
+        /* The painted part of the Turn overlaps the viewport and the passage is
+           not in it: the step numbers say which half of the Turn is missing. */
+        if (targetStep !== null && lowest !== null && highest !== null) {
+          if (highest < targetStep) return 1
+          if (lowest > targetStep) return -1
+        }
+        return 0
+      }
+      /* Nothing of the Turn is keyed with a step number: fall back to the Turn
+         row. A row that straddles the viewport means the rail already put the
+         Turn's start on screen, so the passage is still further down. */
+      const row = findTurnRow(bm.turn, sessionId)
+      if (row === null) return 0
+      let rect = null
+      try { rect = row.getBoundingClientRect() } catch { rect = null }
+      if (rect === null || rect.height <= 0) return 0
+      if (rect.bottom < box.top + 2) return -1
+      if (rect.top > box.bottom - 2) return 1
+      return 1
+    }
+
+    /* One screen of scroll, written directly. The magnitude is what DSH's
+     * reading policy tolerates (it treats a bigger write as a reader jump and
+     * replays the saved anchor), and the caller compensates by loosing the
+     * budget rather than the write size. Slightly under a viewport so a passage
+     * cannot be skipped over between two consecutive samples. */
+    function scrollOneScreen(scroller, sign) {
+      const viewport = Math.max(1, Math.round((scroller.clientHeight || 600) * 0.8))
+      const floor = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      const target = Math.max(0, Math.min(floor, scroller.scrollTop + sign * viewport))
+      try {
+        if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top: target, behavior: 'instant' })
+        else scroller.scrollTop = target
+      } catch {
+        try { scroller.scrollTop = target } catch { }
+      }
+      return target
+    }
+
+    /* Centre the quoted passage, walking the scrollport toward it one screen at
+     * a time. The walk is bounded by wall clock and by PROGRESS, never by a step
+     * count: a Turn of a large session can be a hundred screens tall, so a fixed
+     * 12-step budget stopped twelve screens short and every extra click advanced
+     * another twelve (trace: top 96401 -> 84493 -> ... -> 13045, ten clicks for
+     * one bookmark). One-screen writes are kept because that is the magnitude
+     * DSH's reading policy tolerates, and the caller snapshots the reading
+     * anchor around the whole walk so the reader's saved position is untouched. */
+    async function centrePassage(bm, sessionId, budgetMs) {
+      const deadline = Date.now() + (budgetMs || 20000)
+      const targetStep = stepNumberOf(bm && bm.nodeKey)
+      let stalled = 0
+      let waiting = 0
+      let idle = 0
+      let lastTop = null
+      let steps = 0
+      const seenKeys = new Set()
+      while (Date.now() < deadline && steps < 4000) {
+        const scroller = findScroller(sessionId)
+        if (scroller === null) { await frame(); continue }
+        const hit = passageRange(bm, sessionId)
+        if (steps < 3 || steps % 24 === 0) {
+          trace('walk step=' + steps + ' top=' + Math.round(scroller.scrollTop)
+            + ' hit=' + (hit === null ? 'none' : hit.range !== null ? (hit.byText ? 'text' : 'node') : String(hit.reason || 'el')))
+        }
+        let wrote = false
+        if (hit !== null && hit.range !== null) {
+          const viewport = scroller.clientHeight || 600
+          const outcome = centerQuoteRange(scroller, hit.range, viewport)
+          steps += 1
+          if (outcome === 'ok') return { ok: true, reason: null, steps }
+          wrote = outcome !== 'lost'
+          waiting = 0
+        } else if (hit !== null && hit.reason === 'text-missing') {
+          /* The node is mounted but its text is gone: nothing to centre. */
+          return { ok: false, reason: 'text-missing', steps }
+        } else {
+          /* The passage is outside the mounted window. Steering by the painted
+             parts of its Turn walks the scrollport toward the passage itself
+             instead of stopping at the Turn's opening message, which matters
+             because one Turn of a large session can be a hundred screens tall. */
+          const sign = directionTowardPassage(scroller, bm, sessionId, targetStep)
+          if (steps < 3 || steps % 24 === 0) {
+            trace('walk steer step=' + steps + ' sign=' + sign + ' top=' + Math.round(scroller.scrollTop)
+              + ' idle=' + idle)
+          }
+          /* Scrolling without the Turn painting anything new means the walk is
+             drifting past the passage instead of finding it; stop rather than
+             wander into later Turns. */
+          const keys = paintedTurnNodes(bm.turn, sessionId)
+          let fresh = false
+          for (const node of keys) {
+            if (seenKeys.has(node.key)) continue
+            seenKeys.add(node.key)
+            fresh = true
+          }
+          idle = fresh ? 0 : idle + 1
+          if (idle > 240) return { ok: false, reason: 'passage-unpainted', steps }
+          if (sign === 0) {
+            waiting += 1
+            if (waiting > 240) return { ok: false, reason: 'passage-unpainted', steps }
+          } else {
+            scrollOneScreen(scroller, sign)
+            wrote = true
+            steps += 1
+            waiting = 0
+          }
+        }
+        if (wrote) {
+          const top = Math.round(scroller.scrollTop)
+          /* An unchanged scrollTop after a write means the scrollport is
+             clamped at an end: stop instead of burning the budget. */
+          if (lastTop !== null && Math.abs(top - lastTop) < 1) {
+            stalled += 1
+            if (stalled >= 8) return { ok: false, reason: 'stuck', steps }
+          } else {
+            stalled = 0
+          }
+          lastTop = top
+        }
+        await frame()
+      }
+      return { ok: false, reason: 'budget', steps }
+    }
+
     function findQuoteInTurn(bm, sessionId) {
       let rows = null
       try { rows = qa(TURN_ROW_SELECTOR, sessionId) } catch { return null }
@@ -3521,64 +3718,73 @@ const ICON_PATHS = {
 
     /* A text bookmark stores both a Turn and the DOM key of the quoted node.
      * Landing on the Turn is not landing on the quote: a long Turn scrolls its
-     * host row to the top and the quoted paragraph can sit several screens
-     * below, which reads as "bookmark lost". So the row is settled first and
-     * the quoted PASSAGE is then centred (not the row), retrying while the
-     * virtualizer mounts it. `null` means the quote could not be resolved. */
+     * host row to the top and the quoted paragraph can sit many screens below,
+     * which reads as "bookmark lost". So the quoted PASSAGE is centred (not the
+     * row), walking the scrollport for as long as it keeps making progress.
+     * Returns `{ anchor, walkOk, reason }` when the node was found, `null` when
+     * it never mounted — the caller then tries the text fallback. */
     async function revealQuotedNode(bm, sessionId) {
       if (!bm || bm.kind !== 'text' || !bm.nodeKey) return null
-      /* A very large session virtualises hard: the quoted row may only be
-       * painted several seconds after the flow mounts, so the deadline has to
-       * outlast the mount wait, not just the paint of an already-loaded view. */
-      const deadline = Date.now() + 8000
-      for (let i = 0; i < 240 && Date.now() < deadline; i += 1) {
-        const el = nodeElByKey(sessionId, bm.nodeKey)
-        if (el) {
-          const scroller = findScroller(sessionId)
-          if (scroller === null) { await frame(); continue }
-          const viewport = scroller.clientHeight || 600
-          let range = quoteRange(el, bm)
-          let anchor = el
-          if (range === null) {
-            /* Key drift: look for the text anywhere in the same turn. */
-            const found = findQuoteInTurn(bm, sessionId)
-            if (found === null) {
-              traceForce('jump: quote text not found in turn=' + String(bm.turn) + ' key=' + bm.nodeKey)
-              return el
-            }
-            range = found.range
-            anchor = found.el
-            traceForce('jump: quote recovered by text turn=' + String(bm.turn))
-          }
-          /* The quoted node is already painted (nodeElByKey resolved it), so
-             the passage rect is valid now. Centre the passage DIRECTLY instead
-             of first centring its whole turn row: that intermediate row-centre
-             is the visible two-step the reader saw ("jump to the turn, then to
-             the content"). `centerQuoteRange` walks one viewport at a time so a
-             far passage still scrolls in a short run instead of one big write. */
-          /* A streaming reply keeps `data-chat-following-tail` on: any non-reader
-             scroll is answered by DSH's `followTail()` on the spot, which undoes
-             the write and left the reader stuck ("ok=false" on the first click,
-             then it worked once follow had been dropped by the earlier clicks).
-             So break the pin here, right before the passage is centred, and take
-             the reader's anchor first so a reopen does not land on the passage. */
-          if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
-          const anchorBefore = readAnchor(sessionId)
-          let outcome = centerQuoteRange(scroller, range, viewport)
-          for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
-            await frame()
-            outcome = centerQuoteRange(scroller, range, viewport)
-          }
-          if (anchorBefore !== undefined) {
-            restoreAnchor(sessionId, anchorBefore)
-            setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
-          }
-          traceForce('jump: quote centred ok=' + (outcome === 'ok') + ' turn=' + String(bm.turn) + ' key=' + bm.nodeKey)
-          return anchor
+      /* A very large session virtualises hard: its quoted node may appear only
+       * after the flow mounts, and a Turn whose earlier history pages are still
+       * unloaded paints its ROW before its CONTENT exists — so waiting longer
+       * never conjures the node. `navigateToTurn` is the one path that pages
+       * history up to a Turn (`loadThrough(seq)`), so when the node is missing
+       * DSH's own navigation is asked once to load through it. */
+      const scrollerDeadline = Date.now() + 15000
+      while (Date.now() < scrollerDeadline && findScroller(sessionId) === null) await frame()
+      if (findScroller(sessionId) === null) return null
+
+      /* A streaming reply keeps `data-chat-following-tail` on: any non-reader
+         scroll is answered by DSH's `followTail()` on the spot, which undoes the
+         write and leaves the reader stuck. Break the pin once, before any
+         walking, and take the reader's anchor first so a reopen does not land
+         on the passage. */
+      const firstScroller = findScroller(sessionId)
+      if (firstScroller !== null && followTailPinned(sessionId)) await unpin(firstScroller, sessionId)
+      const anchorBefore = readAnchor(sessionId)
+
+      /* The quoted node may still be outside the loaded window even though its
+         Turn's row is mounted: a single Turn of a huge transcript is itself
+         dozens of screens tall, and its earlier sub-rows only exist once the
+         loader has paged that far. So the walk and the paging are alternated
+         instead of tried once: walk toward the passage, and when it is still
+         missing afterwards ask DSH's own navigation (`navigateToTurn`, which
+         runs `loadThrough(seq)`) to page the history through that Turn again. */
+      let walk = { ok: false, reason: 'not-started', steps: 0 }
+      let hit = passageRange(bm, sessionId)
+      for (let round = 0; round < 4; round++) {
+        if (hit === null || hit.range === null) {
+          trace('jump: quote not mounted (reason=' + String(hit && hit.reason) + ') turn=' + String(bm.turn)
+            + ' round=' + round + ', asking the rail to load through it')
+          try { await jumpViaRail(bm.turn, sessionId, () => false) } catch { /* the walk decides */ }
+          if (findScroller(sessionId) === null) break
         }
-        await frame()
+        const liveScroller = findScroller(sessionId)
+        if (liveScroller !== null && followTailPinned(sessionId)) await unpin(liveScroller, sessionId)
+        walk = await centrePassage(bm, sessionId, round === 0 ? 20000 : 12000)
+        if (walk.ok) break
+        /* A bookmarked text that no longer matches its node cannot be walked to
+           at all: paging more history only burns time. */
+        if (walk.reason === 'text-missing') break
+        hit = passageRange(bm, sessionId)
+        if (hit !== null && hit.range !== null) continue
+        if (walk.reason === 'stuck') break
       }
-      return null
+      if (anchorBefore !== undefined) {
+        restoreAnchor(sessionId, anchorBefore)
+        setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
+      }
+      traceForce('jump: quote centred ok=' + walk.ok + ' reason=' + String(walk.reason || '-')
+        + ' steps=' + walk.steps + ' turn=' + String(bm.turn) + ' key=' + bm.nodeKey)
+      /* The highlight anchor is whichever node holds the passage right now. */
+      const after = passageRange(bm, sessionId)
+      const anchor = after !== null ? after.el : nodeElByKey(sessionId, bm.nodeKey)
+      if (anchor === null && walk.ok === false && walk.reason === 'text-missing') {
+        return { anchor: null, walkOk: false, reason: 'text-missing' }
+      }
+      if (anchor === null) return null
+      return { anchor, walkOk: walk.ok, reason: walk.reason || null }
     }
 
     /* True when the quoted text can be found in the mounted transcript even if
@@ -3655,31 +3861,22 @@ const ICON_PATHS = {
       let quoteOk = true
       let landedByQuote = false
       if (bm && bm.kind === 'text' && bm.nodeKey) {
-        const el = await revealQuotedNode(bm, sessionId)
-        if (el === null) {
+        const seen = await revealQuotedNode(bm, sessionId)
+        if (seen === null) {
           const found = locateQuoteByText(bm, sessionId)
           if (found !== null) {
             const scroller = findScroller(sessionId)
             if (scroller !== null) {
-              const viewport = scroller.clientHeight || 600
-              for (let step = 0; step < 10; step += 1) {
-                if (centerOn(scroller, found.row, viewport) === 'ok') break
-                await frame()
+              if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
+              const anchorBefore = readAnchor(sessionId)
+              const walk = await centrePassage(bm, sessionId, 20000)
+              if (anchorBefore !== undefined) {
+                restoreAnchor(sessionId, anchorBefore)
+                setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
               }
-              if (found.range !== null) {
-                if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
-                const anchorBefore = readAnchor(sessionId)
-                let outcome = centerQuoteRange(scroller, found.range, viewport)
-                for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
-                  await frame()
-                  outcome = centerQuoteRange(scroller, found.range, viewport)
-                }
-                if (anchorBefore !== undefined) {
-                  restoreAnchor(sessionId, anchorBefore)
-                  setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
-                }
-                traceForce('jump: quote centred by text ok=' + (outcome === 'ok') + ' turn=' + String(bm.turn))
-              }
+              traceForce('jump: quote centred by text ok=' + walk.ok + ' reason=' + String(walk.reason || '-')
+                + ' steps=' + walk.steps + ' turn=' + String(bm.turn))
+              if (!walk.ok) quoteOk = false
               landedByQuote = true
             }
           } else {
@@ -3688,6 +3885,7 @@ const ICON_PATHS = {
           }
         } else {
           landedByQuote = true
+          if (seen.walkOk === false) quoteOk = false
         }
         const paint = paintHighlights(sessionId)
         if (paint && paint.missing) {
