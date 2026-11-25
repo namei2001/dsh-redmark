@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.3] - 2026-11-25
+
+### Fixed
+- Text bookmarks no longer jump twice. A text (selection) bookmark used to land
+  on the whole turn row first and then re-centre on the saved passage, which
+  read as "jump to the message, then to the content". For text bookmarks the
+  jump now pages/rails to get the turn mounted but skips the turn-row centring,
+  and `revealQuotedNode` centres the passage directly (removed the redundant
+  "centre the host row" step that ran before centring the quote).
+
 ## [4.0.2] - 2026-11-25
 
 ### Fixed

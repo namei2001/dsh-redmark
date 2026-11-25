@@ -1504,16 +1504,22 @@ window.__ModuleLoader__.load({
      * Phase 2 bisects the scrollport: Turn numbers increase downwards, so the
      * mounted window tells which half still holds the target, then a short
      * sweep lands on the row. Resolves `{ ok, pages, reason }`. */
-    async function jumpToTurn(turn, sessionId, seq) {
+    async function jumpToTurn(turn, sessionId, seq, landTurn) {
       const n = Number(turn)
       if (!Number.isSafeInteger(n)) return { ok: false, pages: 0, reason: 'bad-turn' }
+      /* `landTurn === false` is the text-bookmark case: the caller will centre
+       * the quoted passage itself afterwards, so landing on the whole turn row
+       * here would be a visible intermediate step (jump to the turn, then to the
+       * passage). We still page/rail to get the row MOUNTED, but skip the row
+       * centring so the passage pass owns the single visible motion. */
+      const centerRow = landTurn !== false
       /* A newer jump (or a view change) supersedes this one: the phases below
        * page history and write scrollTop, so they must stop as soon as the
        * reader has asked for something else instead of fighting it. */
       const jumpTag = jumpSequence
       const stale = () => jumpTag !== jumpSequence
       traceBudget = 220
-      trace('jump begin turn=' + n + ' session=' + sessionId + ' seq=' + seq)
+      trace('jump begin turn=' + n + ' session=' + sessionId + ' seq=' + seq + ' centerRow=' + centerRow)
 
       /* The Chat flow has to be the mounted view before any of this means
        * anything; a heavy transcript can take a while to replace the previous
@@ -1540,10 +1546,17 @@ window.__ModuleLoader__.load({
       /* Already mounted: land on it without touching history at all. */
       await unpin(scroller, sessionId)
       if (findTurnRow(n, sessionId) !== null) {
-        const landed = await settleOn(scroller, n, sessionId)
-        trace('fast path row found settle=' + (landed !== null))
-        if (landed) { flash(landed); return { ok: true, pages } }
-        landedOnce = true
+        if (centerRow) {
+          const landed = await settleOn(scroller, n, sessionId)
+          trace('fast path row found settle=' + (landed !== null))
+          if (landed) { flash(landed); return { ok: true, pages } }
+          landedOnce = true
+        } else {
+          /* Row is mounted; leave it where it is and let the caller centre the
+             passage. Confirm mount without centring. */
+          trace('fast path row mounted (text), deferring to passage centre')
+          return { ok: true, pages }
+        }
       }
       trace('fast path miss')
 
@@ -1554,7 +1567,7 @@ window.__ModuleLoader__.load({
        * only drop the pin a second time for no gain. */
       const rail = await jumpViaRail(n, sessionId, stale)
       if (stale()) { trace('jump superseded after rail'); return { ok: false, pages, reason: 'superseded' } }
-      if (rail.row !== null) { flash(rail.row); return { ok: true, pages: Math.max(pages, 1) } }
+      if (rail.row !== null) { if (centerRow) flash(rail.row); return { ok: true, pages: Math.max(pages, 1) } }
       /* Only an unreachable rail may hand over to the legacy pager: that loop
          writes `scrollTop` and clicks `loadOlder`, which the viewport samples as
          reader movement and undoes — the sweep the reader sees as flicker
@@ -1592,6 +1605,7 @@ window.__ModuleLoader__.load({
 
         const row = findTurnRow(n, sessionId)
         if (row !== null) {
+          if (!centerRow) { trace('p1 mounted (text) at #' + guard); return { ok: true, pages } }
           const landed = await settleOn(scroller, n, sessionId)
           if (landed) { flash(landed); trace('p1 landed at #' + guard); return { ok: true, pages } }
           landedOnce = true
@@ -1651,6 +1665,7 @@ window.__ModuleLoader__.load({
         if (live !== null) scroller = live
         const row = findTurnRow(n, sessionId)
         if (row !== null) {
+          if (!centerRow) { trace('p2 mounted (text) at probe #' + i); return { ok: true, pages } }
           const landed = await settleOn(scroller, n, sessionId)
           if (landed) { flash(landed); trace('p2 landed row at probe #' + i); return { ok: true, pages } }
           landedOnce = true
@@ -1667,6 +1682,7 @@ window.__ModuleLoader__.load({
           const near = await sweepNear(n, scroller, 26, sessionId)
           trace('p2 bracketed sweep=' + (near !== null))
           if (near !== null) {
+            if (!centerRow) { trace('p2 mounted (text) via sweep'); return { ok: true, pages } }
             const landed = await settleOn(scroller, n, sessionId)
             if (landed) { flash(landed); trace('p2 swept landed'); return { ok: true, pages } }
             landedOnce = true
@@ -1685,6 +1701,7 @@ window.__ModuleLoader__.load({
       trace('final sweep=' + (near !== null) + ' landedOnce=' + landedOnce)
       if (stale()) return { ok: false, pages, reason: 'superseded' }
       if (near !== null) {
+        if (!centerRow) { trace('final sweep mounted (text)'); return { ok: true, pages } }
         const landed = await settleOn(scroller, n, sessionId)
         if (landed) { flash(landed); return { ok: true, pages } }
         landedOnce = true
@@ -1749,8 +1766,10 @@ window.__ModuleLoader__.load({
       } catch { slow = 0 }
 
       let result = { ok: false, pages: 0 }
+      const isText = Boolean(bm && bm.kind === 'text' && bm.nodeKey)
+      const landTurn = isText ? false : true
       try {
-        result = await jumpToTurn(turn, sessionId, seq)
+        result = await jumpToTurn(turn, sessionId, seq, landTurn)
       } catch {
         result = { ok: false, pages: 0 }
       }
@@ -1774,7 +1793,7 @@ window.__ModuleLoader__.load({
           await sleep(120)
         }
         try {
-          const again = await jumpToTurn(turn, sessionId, seq)
+          const again = await jumpToTurn(turn, sessionId, seq, landTurn)
           const loaded = Math.max(again.pages || 0, result.pages || 0)
           result = again.ok
             ? { ok: true, pages: loaded }
@@ -3437,13 +3456,6 @@ const ICON_PATHS = {
           const scroller = findScroller(sessionId)
           if (scroller === null) { await frame(); continue }
           const viewport = scroller.clientHeight || 600
-          /* The host row has to be near the viewport before the virtualizer
-             paints the quoted passage; then the passage itself is centred. */
-          const host = closestTurn(el) || el
-          for (let step = 0; step < 10; step += 1) {
-            if (centerOn(scroller, host, viewport) === 'ok') break
-            await frame()
-          }
           let range = quoteRange(el, bm)
           let anchor = el
           if (range === null) {
@@ -3456,12 +3468,13 @@ const ICON_PATHS = {
             range = found.range
             anchor = found.el
             traceForce('jump: quote recovered by text turn=' + String(bm.turn))
-            const hostRow = closestTurn(anchor) || anchor
-            for (let step = 0; step < 10; step += 1) {
-              if (centerOn(scroller, hostRow, viewport) === 'ok') break
-              await frame()
-            }
           }
+          /* The quoted node is already painted (nodeElByKey resolved it), so
+             the passage rect is valid now. Centre the passage DIRECTLY instead
+             of first centring its whole turn row: that intermediate row-centre
+             is the visible two-step the reader saw ("jump to the turn, then to
+             the content"). `centerQuoteRange` walks one viewport at a time so a
+             far passage still scrolls in a short run instead of one big write. */
           let outcome = centerQuoteRange(scroller, range, viewport)
           for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
             await frame()
@@ -3503,8 +3516,8 @@ const ICON_PATHS = {
         if (sessionRoot(sessionId) && findScroller(sessionId)) break
         await frame()
       }
-      const token = ++jumpSequence
-      let res = await jumpToTurn(turn, sessionId, seq, token)
+      const isText = Boolean(bm && bm.kind === 'text' && bm.nodeKey)
+      let res = await jumpToTurn(turn, sessionId, seq, isText ? false : true)
       const pages = res && Number.isFinite(res.pages) ? res.pages : 0
       traceForce('jump: turn=' + turn + ' ok=' + (res && res.ok) + ' pages=' + pages
         + ' reason=' + String((res && res.reason) || '-') + ' kind=' + String((bm && bm.kind) || '-')
