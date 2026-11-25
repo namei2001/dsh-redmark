@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.5] - 2026-11-25
+
+### Fixed
+- Cross-session jumps no longer land on the wrong conversation. `sessionRoot`
+  used to fall back to `document` when the named session was not mounted yet,
+  which made every scoped query (`q`/`qa`/`findScroller`) resolve against the
+  FIRST Chat flow in the page — the previously open conversation. It now returns
+  `null` so the jump waits for the real session to mount.
+- Jumping to a bookmark from the all-bookmarks page now clears the main panel
+  back to the Conversation before opening the target session, so the Chat flow is
+  actually mounted to switch into (previously `openSession` had nothing visible
+  to replace and the jump re-ran against a stale/absent session, needing several
+  clicks).
+- Text-bookmark centring no longer gets undone on the first click while the reply
+  is still streaming. `revealQuotedNode` and the by-text fallback now break the
+  tail pin right before centring the passage and snapshot/restore the reading
+  anchor, matching the find path, instead of fighting DSH's `followTail()`.
+
 ## [4.0.4] - 2026-11-25
 
 ### Fixed

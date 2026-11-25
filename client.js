@@ -581,18 +581,27 @@ window.__ModuleLoader__.load({
         try {
           const root = document.querySelector(SESSION_CONTENT_SELECTOR + '="' + escaped + '"')
           if (root) return root
-        } catch { /* fall through to document */ }
+        } catch { /* fall through */ }
+        /* The named session is not mounted (it may still be switching in after
+         * `openSession`). Returning `document` here would make every scoped query
+         * grab the FIRST Chat flow in the document — the wrong conversation —
+         * which is exactly the "jump landed in the wrong session" failure. Return
+         * null so the caller waits for the real root instead of acting on a
+         * stranger's DOM. */
+        return null
       }
       return document
     }
 
     function q(sel, sessionId) {
       const root = sessionRoot(sessionId)
+      if (root === null) return null
       try { return root.querySelector(sel) } catch { return null }
     }
 
     function qa(sel, sessionId) {
       const root = sessionRoot(sessionId)
+      if (root === null) return []
       try { return root.querySelectorAll(sel) } catch { return [] }
     }
 
@@ -1828,10 +1837,16 @@ window.__ModuleLoader__.load({
                 await frame()
               }
               if (found.range !== null) {
+                if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
+                const anchorBefore = readAnchor(sessionId)
                 let outcome = centerQuoteRange(scroller, found.range, viewport)
                 for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
                   await frame()
                   outcome = centerQuoteRange(scroller, found.range, viewport)
+                }
+                if (anchorBefore !== undefined) {
+                  restoreAnchor(sessionId, anchorBefore)
+                  setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
                 }
                 traceForce('jump: quote centred by text ok=' + (outcome === 'ok') + ' turn=' + String(bm.turn))
               }
@@ -2319,7 +2334,8 @@ window.__ModuleLoader__.load({
     }
 
     function liveScroller(sessionId) {
-      return findScroller(sessionId) || (sessionId ? sessionRoot(sessionId) : document).querySelector(SCROLLER_SELECTOR)
+      const root = sessionId ? sessionRoot(sessionId) : document
+      return findScroller(sessionId) || (root && root.querySelector(SCROLLER_SELECTOR))
     }
 
     async function revealFindMatch(sessionId) {
@@ -3380,6 +3396,17 @@ const ICON_PATHS = {
 
     /* Navigate to another conversation and land on its bookmark. */
     function openSessionAndJump(sessionId, turn, seq, bm) {
+      /* The all-bookmarks page is a main panel (PANEL_ID), and the Conversation
+         is the layout's *null* panel: while a main panel is selected the Chat
+         flow is not mounted, so `openSession` below would have nothing to switch
+         into view. Clear the panel back to the Conversation first — the same
+         step `backToConversation` performs — then ask the workspace to open the
+         target session, and only then run the jump. */
+      try {
+        if (appCtx && appCtx.layout && typeof appCtx.layout.selectPanel === 'function') {
+          appCtx.layout.selectPanel(null)
+        }
+      } catch { /* best effort */ }
       try {
         if (appCtx && appCtx.uiWorkspace && typeof appCtx.uiWorkspace.openSession === 'function') {
           appCtx.uiWorkspace.openSession(sessionId)
@@ -3501,10 +3528,22 @@ const ICON_PATHS = {
              is the visible two-step the reader saw ("jump to the turn, then to
              the content"). `centerQuoteRange` walks one viewport at a time so a
              far passage still scrolls in a short run instead of one big write. */
+          /* A streaming reply keeps `data-chat-following-tail` on: any non-reader
+             scroll is answered by DSH's `followTail()` on the spot, which undoes
+             the write and left the reader stuck ("ok=false" on the first click,
+             then it worked once follow had been dropped by the earlier clicks).
+             So break the pin here, right before the passage is centred, and take
+             the reader's anchor first so a reopen does not land on the passage. */
+          if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
+          const anchorBefore = readAnchor(sessionId)
           let outcome = centerQuoteRange(scroller, range, viewport)
           for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
             await frame()
             outcome = centerQuoteRange(scroller, range, viewport)
+          }
+          if (anchorBefore !== undefined) {
+            restoreAnchor(sessionId, anchorBefore)
+            setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
           }
           traceForce('jump: quote centred ok=' + (outcome === 'ok') + ' turn=' + String(bm.turn) + ' key=' + bm.nodeKey)
           return anchor
@@ -3549,7 +3588,7 @@ const ICON_PATHS = {
     }
 
     async function jumpInPlace(turn, sessionId, seq, bm) {
-      for (let i = 0; i < 150; i += 1) {
+      for (let i = 0; i < 300; i += 1) {
         if (sessionRoot(sessionId) && findScroller(sessionId)) break
         await frame()
       }
@@ -3579,10 +3618,16 @@ const ICON_PATHS = {
                 await frame()
               }
               if (found.range !== null) {
+                if (followTailPinned(sessionId)) await unpin(scroller, sessionId)
+                const anchorBefore = readAnchor(sessionId)
                 let outcome = centerQuoteRange(scroller, found.range, viewport)
                 for (let step = 0; step < 12 && outcome !== 'ok'; step += 1) {
                   await frame()
                   outcome = centerQuoteRange(scroller, found.range, viewport)
+                }
+                if (anchorBefore !== undefined) {
+                  restoreAnchor(sessionId, anchorBefore)
+                  setTimeout(() => restoreAnchor(sessionId, anchorBefore), 700)
                 }
                 traceForce('jump: quote centred by text ok=' + (outcome === 'ok') + ' turn=' + String(bm.turn))
               }
