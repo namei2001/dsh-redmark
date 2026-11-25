@@ -70,6 +70,7 @@ window.__ModuleLoader__.load({
         'jump.loading': '正在加载更早的对话…',
         'jump.failed': '无法定位到该轮：已加载 {pages} 页更早的历史，仍未找到它。',
         'jump.failedStart': '已翻到这段对话的最开头，仍没找到该书签所在的位置（可能已被压缩，或属于别的会话）。',
+        'jump.stillLoading': '该会话仍在加载中（超大会话加载较慢），请稍候再点一次。',
         'jump.loaded': '已自动加载更早的历史，并跳转到该轮',
         'jump.located': '已跳转到该轮',
         'jump.quotePending': '（引用的那段还没加载出来，往下翻一点即可）',
@@ -127,6 +128,7 @@ window.__ModuleLoader__.load({
         'jump.loading': 'Loading older messages…',
         'jump.failed': 'Could not reach that turn after loading {pages} page(s) of older history.',
         'jump.failedStart': 'Reached the start of this conversation without finding that bookmark (it may have been compacted or belong to another session).',
+        'jump.stillLoading': 'That conversation is still loading (large transcripts take a while) — try again in a moment.',
         'jump.loaded': 'Loaded older history and jumped to the turn',
         'jump.located': 'Jumped to that turn',
         'jump.quotePending': '(the quoted passage is not loaded yet -- scroll a little and it will appear)',
@@ -1537,15 +1539,30 @@ window.__ModuleLoader__.load({
        * than that to mount — wait on wall-clock time instead. */
       let scroller = null
       let waited = 0
-      const scrollerDeadline = Date.now() + 15000
+      /* The Chat flow only mounts once the session's transcript has finished
+       * loading: `openState` goes `cold -> loading -> open`, and the shell shows
+       * a settling placeholder (no `[data-chat-flow]`) the whole time it is
+       * `loading`. A 7.8M-token session can stay `loading` longer than any fixed
+       * wait, so wait on the OPEN state first — when `openState === 'open'` the
+       * flow mounts a frame later — and keep a fallback timeout in case the
+       * snapshot is unavailable. */
+      const scrollerDeadline = Date.now() + 30000
       while (scroller === null && Date.now() < scrollerDeadline) {
         await frame()
+        const snap = sessionSnapshot(sessionId)
+        const openState = snap ? snap.openState : undefined
+        /* If the shell itself reports a terminal state that will never mount the
+           chat flow (`error`), stop waiting instead of burning the whole budget. */
+        if (openState === 'error') break
         scroller = findScroller(sessionId)
         waited += 1
       }
       if (scroller === null) {
-        trace('no scroller after ' + waited + ' frames, flow=' + (q(CHAT_FLOW_SELECTOR, sessionId) !== null))
-        return { ok: false, pages: 0, reason: 'no-scroller' }
+        const snap = sessionSnapshot(sessionId)
+        const openState = snap ? snap.openState : 'unknown'
+        trace('no scroller after ' + waited + ' frames, flow=' + (q(CHAT_FLOW_SELECTOR, sessionId) !== null)
+          + ' openState=' + String(openState))
+        return { ok: false, pages: 0, reason: openState === 'loading' ? 'still-loading' : 'no-scroller' }
       }
       trace('scroller at frame ' + waited + ' sh=' + scroller.scrollHeight + ' ch=' + scroller.clientHeight
         + ' top=' + Math.round(scroller.scrollTop) + ' pinned=' + followTailPinned(sessionId))
@@ -3596,11 +3613,22 @@ const ICON_PATHS = {
     async function jumpInPlace(turn, sessionId, seq, bm) {
       /* A 7.8M-token session can take well over the old 150 frames (≈2.5s) to
        * mount after `openSession`; wait on wall-clock time here too, or the
-       * jump gives up before the target conversation even exists in the DOM. */
-      const rootDeadline = Date.now() + 15000
+       * jump gives up before the target conversation even exists in the DOM.
+       * The shell keeps the Chat flow unmounted while the transcript is still
+       * loading (`openState === 'loading'`), so this first gate also waits for
+       * the session to reach `open` — the flow mounts right after. */
+      const rootDeadline = Date.now() + 30000
       while (Date.now() < rootDeadline) {
         if (sessionRoot(sessionId) && findScroller(sessionId)) break
+        const snap = sessionSnapshot(sessionId)
+        if (snap && snap.openState === 'error') break
         await frame()
+      }
+      {
+        const snap = sessionSnapshot(sessionId)
+        traceForce('jump: root gate openState=' + String(snap ? snap.openState : 'unavailable')
+          + ' flow=' + (q(CHAT_FLOW_SELECTOR, sessionId) !== null)
+          + ' root=' + (sessionRoot(sessionId) !== null))
       }
       const isText = Boolean(bm && bm.kind === 'text' && bm.nodeKey)
       let res = await jumpToTurn(turn, sessionId, seq, isText ? false : true)
@@ -3664,8 +3692,12 @@ const ICON_PATHS = {
         if (quoteOk) showToast('ok', tt(pages > 0 ? 'jump.loaded' : 'jump.located'))
         else showToast('ok', tt(pages > 0 ? 'jump.loaded' : 'jump.located') + ' ' + tt('jump.quotePending'))
       } else {
-        const key = res && res.reason === 'exhausted' ? 'jump.failedStart' : 'jump.failed'
-        showToast('error', tt(key).replace('{pages}', String(pages)) + ' [' + String((res && res.reason) || 'unknown') + ']')
+        if (res && res.reason === 'still-loading') {
+          showToast('error', tt('jump.stillLoading'))
+        } else {
+          const key = res && res.reason === 'exhausted' ? 'jump.failedStart' : 'jump.failed'
+          showToast('error', tt(key).replace('{pages}', String(pages)) + ' [' + String((res && res.reason) || 'unknown') + ']')
+        }
       }
       return res
     }
@@ -3679,15 +3711,21 @@ const ICON_PATHS = {
      * cached; a session the shell cannot describe falls back to its id. */
     const titleCache = new Map()
 
+    function sessionSnapshot(sessionId) {
+      try {
+        const sessions = appCtx && (appCtx.sessions || (appCtx.get && appCtx.get('sessions')))
+        const binding = sessions && typeof sessions.binding === 'function' ? sessions.binding(sessionId) : null
+        return binding && binding.session && typeof binding.session.getSnapshot === 'function'
+          ? binding.session.getSnapshot()
+          : null
+      } catch { return null }
+    }
+
     function resolveSessionTitle(sessionId) {
       if (titleCache.has(sessionId)) return titleCache.get(sessionId)
       let title = ''
       try {
-        const sessions = appCtx && (appCtx.sessions || (appCtx.get && appCtx.get('sessions')))
-        const binding = sessions && typeof sessions.binding === 'function' ? sessions.binding(sessionId) : null
-        const snap = binding && binding.session && typeof binding.session.getSnapshot === 'function'
-          ? binding.session.getSnapshot()
-          : null
+        const snap = sessionSnapshot(sessionId)
         if (snap) title = String(snap.title || snap.name || snap.displayTitle || '')
       } catch { /* fall back to the id */ }
       /* Only a real title is cached: caching '' pinned the id fallback forever,

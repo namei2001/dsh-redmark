@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.7] - 2026-11-25
+
+### Fixed
+- Jumping into a very large session no longer errors with a bare `[no-scroller]`
+  while the transcript is still loading. The shell keeps the Chat flow unmounted
+  until the session reaches `openState === 'open'` (it shows a settling
+  placeholder the whole time it is `loading`), so the jump's mount waits now
+  read the session snapshot's `openState` and wait up to 30s for `open`, rather
+  than only polling for the `[data-chat-flow]` node. When the session is still
+  `loading` at the deadline, the toast explains it is still loading instead of
+  reporting a generic failure.
+
 ## [4.0.6] - 2026-11-25
 
 ### Fixed

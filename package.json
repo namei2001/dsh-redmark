@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-redmark",
-  "version": "4.0.6",
+  "version": "4.0.7",
   "private": true,
   "type": "module",
   "description": "dsh-redmark — bookmark turns and text ranges in long DSH conversations and jump back reliably.",
