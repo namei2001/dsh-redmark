@@ -3154,7 +3154,9 @@ const ICON_PATHS = {
           const engine = globalThis.CSS
           if (!(engine && typeof engine.supports === 'function' && engine.supports('field-sizing', 'content'))) {
             el.style.height = 'auto'
-            const max = 124
+            /* Same cap as the stylesheet's `max-height` so a long note scrolls
+               inside the field instead of being clipped by the popover. */
+            const max = Math.max(96, Math.min(240, Math.round((window.innerHeight || 800) * 0.4)))
             el.style.height = Math.min(max, Math.max(28, el.scrollHeight)) + 'px'
             el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden'
           }
@@ -3897,11 +3899,14 @@ body[data-ds-dark-theme]{--bm-accent:#7aa6ff;--bm-accent-btn:#3f6fe0}
 .dsh-bm-meta{display:flex;align-items:center;gap:8px;min-width:0}
 .dsh-bm-turn{font-size:11px;font-weight:600;line-height:16px;padding:1px 7px;border-radius:999px;color:var(--bm-accent);background:var(--dsw-alias-bg-layer-2,rgba(74,125,255,.12));border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.18));white-space:nowrap;flex:0 0 auto}
 .dsh-bm-time{font-size:11px;color:var(--dsw-alias-label-tertiary,#86868b);font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
-.dsh-bm-note{font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-primary,inherit);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsh-bm-note{display:block;font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-primary,inherit);white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 .dsh-bm-quote{font-size:12.5px;line-height:1.55;color:var(--dsw-alias-label-primary,inherit);padding-left:8px;border-left:2px solid rgba(255,204,0,.7);word-break:break-word;white-space:pre-wrap;max-height:132px;overflow-y:auto;cursor:pointer}
 .dsh-bm-note.is-empty{color:var(--dsw-alias-label-secondary,#888);font-style:italic;opacity:.8}
 
 .dsh-bm-actions{display:flex;align-items:center;gap:2px;padding:0 8px 0 0;flex:0 0 auto}
+/* A note may wrap over several lines: keep the row controls at the top-right
+   instead of letting the stretched row centre them. */
+.dsh-bm-item > .dsh-bm-actions{align-self:flex-start}
 .dsh-bm-item .dsh-bm-btn{opacity:.45}
 .dsh-bm-item:hover .dsh-bm-btn,.dsh-bm-item:focus-within .dsh-bm-btn,.dsh-bm-item.is-editing .dsh-bm-btn{opacity:1}
 @media (hover:none){.dsh-bm-item .dsh-bm-btn{opacity:.8}}
@@ -3923,7 +3928,7 @@ body[data-ds-dark-theme]{--bm-accent:#7aa6ff;--bm-accent-btn:#3f6fe0}
  * text can never clip: 4px padding + 20px line + 4px padding + 2px border
  * = 30px floor, and 4px steps above that. field-sizing does the growth where
  * the engine supports it; the effect in the component covers the rest. */
-.dsh-bm-note-input{display:block;flex:0 0 auto;align-self:stretch;width:100%;box-sizing:border-box;height:auto;min-height:28px;max-height:124px;padding:4px 7px;border-radius:var(--dsw-radius-sm,8px);line-height:18px;font-size:11.5px;overflow-y:hidden;resize:none;field-sizing:content;white-space:pre-wrap;overflow-wrap:anywhere}
+.dsh-bm-note-input{display:block;flex:0 0 auto;align-self:stretch;width:100%;box-sizing:border-box;height:auto;min-height:28px;max-height:min(40vh,240px);padding:4px 7px;border-radius:var(--dsw-radius-sm,8px);line-height:18px;font-size:11.5px;overflow-y:auto;resize:none;field-sizing:content;white-space:pre-wrap;overflow-wrap:anywhere}
 /* Same auto-wrap behaviour for the row editor inside the bookmarks list. */
 .dsh-bm-edit-input{font-size:12px;line-height:1.45;min-height:30px;max-height:180px;border:none;background:transparent;color:var(--dsw-alias-label-secondary,#86868b);padding:2px 0}
 .dsh-bm-edit-input:focus{color:var(--dsw-alias-label-primary,inherit)}
@@ -4008,7 +4013,7 @@ body[data-ds-dark-theme]{--bm-accent:#7aa6ff;--bm-accent-btn:#3f6fe0}
 .dsh-bm-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;cursor:pointer}
 .dsh-bm-group-title{font-size:13.5px;font-weight:500;color:var(--dsw-alias-label-primary,#f5f6f7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 .dsh-bm-session{font-size:11px;color:var(--dsw-alias-label-secondary,#86868b);max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-bm-list{list-style:none;margin:0;padding:6px 14px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--dsw-alias-border-l1,rgba(128,128,128,.1))}
+.dsh-bm-group .dsh-bm-list{list-style:none;margin:0;padding:6px 14px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--dsw-alias-border-l1,rgba(128,128,128,.1))}
 
 /* ---- right rail body ---- */
 .dsh-bm-rail-body{display:flex;flex-direction:column;min-height:0;height:100%;padding:0;gap:0;background:var(--dsw-alias-bg-base,transparent);color:var(--dsw-alias-label-primary,#f5f5f7);overflow:hidden;font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif}

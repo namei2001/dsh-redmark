@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-11-25
+
+### Fixed
+- Long notes are no longer truncated. Sidebar cards and page rows now render the
+  whole note (`white-space: pre-wrap`, `overflow-wrap: anywhere`) instead of a
+  single line clipped with an ellipsis.
+- The note editor grows with its content up to `min(40vh, 240px)` and scrolls
+  beyond that, instead of being capped at a fixed 124px with
+  `overflow-y: hidden`, which made overflowing text unreachable.
+- Grouped list rules on the Bookmarks page are now scoped with a descendant
+  selector, so they no longer override the sidebar list flex/scroll rule.
+
+### Changed
+- Card action buttons (edit/delete) stay pinned to the card's top-right corner
+  when the card grows taller.
+- The JS auto-grow fallback uses the same `min(40vh, 240px)` cap as the CSS.
+
 ## [4.0.0] - 2026-11-23 — dsh-redmark
 
 First public GitHub release of `dsh-redmark`: a DSH Cordis web bundle for
