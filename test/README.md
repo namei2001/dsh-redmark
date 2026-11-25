@@ -25,5 +25,6 @@ required in ordinary CI (see `.github/workflows/ci.yml`).
 | locale | `locale/en.json` and `locale/zh.json` carry meta title/description |
 | host | `index.js` injects `webServer`, declares the route and size-limit constants |
 | client | `client.js` registers the panel, slots, and jump-back/guard machinery |
+| session-scoped jumps | `sessions` inject, `sessionRoot` selector, `openState` waits, `still-loading`, and passage-centring helpers (`centrePassage`, `revealQuotedNode`, node step disambiguation) |
 | migration | older localStorage keys and mirror files are adopted, not dropped |
 | secrets | `.env.example` contains no real keys |

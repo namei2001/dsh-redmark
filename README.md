@@ -9,7 +9,7 @@
 [English](README.md) · [中文](README.zh-CN.md)
 
 [![CI](https://github.com/namei2001/dsh-redmark/actions/workflows/ci.yml/badge.svg)](https://github.com/namei2001/dsh-redmark/actions)
-![Version](https://img.shields.io/badge/version-4.0.0-blue)
+![Version](https://img.shields.io/badge/version-4.0.9-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-DSH%20Web%20Bundle-orange)
@@ -50,9 +50,9 @@ trigger — see the [optimization history](#jump-back--follow-tail-guard-optimiz
 | Feature | Description |
 | --- | --- |
 | Turn bookmarks | Bookmark an assistant reply from its message toolbar (order 40); stores `turn` / `seq` / note |
-| Text-range bookmarks | Highlight a selection via the CSS Custom Highlight API; stores quote, offsets, and prefix/suffix context |
+| Text-range bookmarks | Highlight a selection via the CSS Custom Highlight API; stores quote, offsets, and prefix/suffix context; lands on the quoted passage, not the whole turn |
 | Dedicated panel | `sidebar.panellist` + main panel + right-side tab, multiple entry points |
-| Precise jump-back | Reuses DSH's own scroll anchors (Plan C) and the TurnNavigator rail — never writes synthetic scroll events |
+| Precise jump-back | Session-scoped queries + DSH's own scroll anchors (Plan C) and TurnNavigator rail — never writes synthetic scroll events; handles huge / still-loading sessions |
 | Find in conversation | `Ctrl/Cmd+F` capture-phase shortcut that never steals keystrokes from input fields; highlighted, step-wise navigation |
 | Follow-tail guard | Repairs intentless pin drops under narrow conditions, respects deliberate reader scrolling, capped at 200 repairs |
 | Best-effort persistence | `localStorage` as primary store; optional JSON mirror through the Host `/dsh-redmark` route |
@@ -66,7 +66,7 @@ This repository is a local DSH Cordis bundle with zero npm dependencies. Key
 ```json
 {
   "name": "@local/dsh-redmark",
-  "version": "4.0.0",
+  "version": "4.0.9",
   "type": "module",
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
@@ -186,7 +186,21 @@ the view slides back to your last message.
 - `jumpToTurn` prefers DSH's own scroll anchors (Plan C: `save(null)` to return
   to the tail, `save(position)` to pin), falling back to the legacy pager only
   when no rail handle exists; it pages in up to 240 pages when necessary, then
-  bisects the scrollport with 48 probes to land precisely.
+  bisects the scrollport with 48 probes to land precisely. All queries are scoped
+  to the target session (`[data-conversation-session="<id>"]`), so cross-session
+  jumps no longer land in the wrong conversation.
+- **Text bookmarks land on the passage, not the turn row.** The jump still pages
+  the Turn into view but skips turn-row centring; `revealQuotedNode` then walks
+  the scrollport to the quoted paragraph. A stored node's kind+step is used to
+  disambiguate short quotes that also appear in reasoning nodes, and the reader's
+  scroll anchor is snapshotted and restored around the walk.
+- **Huge / still-loading sessions.** Mount waits use a 30 s wall-clock deadline
+  and check the session snapshot's `openState` (the shell leaves the Chat flow
+  unmounted while `loading`); a session still loading at the deadline gets a
+  specific "still loading" toast. The passage walk is progress-bounded with a
+  stall detector instead of a fixed 12-screen cap — a bookmark in a multi-screen
+  Turn now reaches its passage in one click. Paging and walking are alternated
+  up to four rounds, and the success toast reflects the passage walk's result.
 
 **Sample diagnostics** (from a real trace, showing the mechanism at work):
 
@@ -230,6 +244,8 @@ Get-Content "$env:USERPROFILE\.dsh\dsh-redmark-trace.log" -Tail 120
 | Inaccurate jump | `reveal align ok=false` / `no-landing` | Check that a rail handle exists and the session was not switched |
 | Sliding back again | `intentless=false` in `guard drop` | A deliberate reader scroll — the guard correctly stands down; no action needed |
 | Repeated re-pinning | `guard: repair cap reached (200)` | Intervention already stopped automatically; reload DSH to reset |
+| "Still loading" toast | `openState=loading` in `jump: root gate` | The huge session is not open yet; wait for it to finish loading and click again |
+| "Quoted passage not loaded" | `jump: quote centred ok=false` | The walk was bounded; scroll a little into that Turn so the passage paints, or click again to page more history |
 | Mirror not working | No route in log / `durable=false` | Only affects cross-browser recovery; `localStorage` still works |
 
 See [docs/usage.md](docs/usage.md), "Reading the diagnostic trace", for details.
@@ -252,8 +268,8 @@ $proj = "C:\Users\EDY\Documents\deepseek-harness\default-workspace\dsh-redmark"
 Expected output:
 
 ```
-Bundle check OK: @local/dsh-redmark@4.0.0
-# 7 tests passed
+Bundle check OK: @local/dsh-redmark@4.0.9
+# 8 tests passed
 ```
 
 > `--experimental-test-isolation=none` is only needed inside the DSH sandbox,
@@ -269,6 +285,15 @@ CI (GitHub Actions, Node 20) runs `scripts/check-bundle.js` and
 A: This is a DSH Cordis **JS bundle**, not a Python service. The equivalents are
 `package.json` and root-level `index.js` / `client.js`; the plugin runs inside
 the DSH desktop process and needs no container.
+
+**Q: Jumping into a very large session fails with "still loading" / the quote is not shown.**
+A: The shell leaves the Chat flow unmounted until the session finishes loading
+(`openState === 'open'`). dsh-redmark now waits up to 30 s for that state; if the
+session is still loading at the deadline, wait a moment and click the bookmark
+again. Text bookmarks use a progress-bounded passage walk (plus up to four
+paging rounds), so a passage deep inside a huge Turn is reached in one click in
+most cases; if the toast says the quote is not loaded yet, scroll a little into
+that Turn so the passage paints, then click again.
 
 **Q: Will deleting the trace log lose bookmarks?**
 A: No. Bookmarks live in `localStorage` (plus the optional JSON mirror); the log

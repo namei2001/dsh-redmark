@@ -10,6 +10,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8')
 test('package.json is a complete DSH bundle manifest', () => {
   const pkg = JSON.parse(read('package.json'))
   assert.equal(pkg.name, '@local/dsh-redmark')
+  assert.equal(pkg.version, '4.0.9')
   assert.equal(pkg.type, 'module')
   assert.equal(pkg.private, true)
   assert.equal(pkg.dsh.bundle.patch, './cordis.patch.yml')
@@ -60,6 +61,23 @@ test('client half registers the panel, slots and jump-back machinery', () => {
   assert.match(src, /function jumpViaRail/)
   assert.match(src, /function railHandle/)
   assert.match(src, /anchorStore/)
+})
+
+test('client half guards session-scoped jumps and passage centring', () => {
+  const src = read('client.js')
+  // The sessions service must be injected for openState to be readable.
+  assert.match(src, /const inject = \[[^\]]*'sessions'\]/)
+  assert.match(src, /function sessionSnapshot\(sessionId\)/)
+  assert.match(src, /openState === 'loading'/)
+  assert.match(src, /openState === 'error'/)
+  assert.match(src, /SESSION_CONTENT_SELECTOR = '\[data-conversation-session\]'/)
+  assert.match(src, /querySelector\('\[data-conversation-session="' \+ escaped \+ '"\]'\)/)
+  assert.match(src, /function sessionRoot\(sessionId\)/)
+  assert.match(src, /async function centrePassage\(bm, sessionId, budgetMs\)/)
+  assert.match(src, /async function revealQuotedNode\(bm, sessionId\)/)
+  assert.match(src, /function nodeStepOf/)
+  assert.match(src, /still-loading/)
+  assert.match(src, /jump\.quotePending/)
 })
 
 test('legacy localStorage keys and mirror files are adopted, not dropped', () => {

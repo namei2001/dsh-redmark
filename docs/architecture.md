@@ -93,6 +93,13 @@ scroll events.**
   `returnToBottom()` through React fibers (`__reactFiber$`). `save(null)` means
   "reopen at tail"; `save(position)` pins. DOM fallback for the scroll handle is
   `button[class*="toBottom"]`.
+- **Session-scoped queries** (`sessionRoot`, `q`/`qa`/`findScroller`): the shell
+  wraps each conversation in `[data-conversation-session="<id>"]`; with several
+  conversations mounted, a bare `document.querySelector` grabs the first (wrong)
+  one. All jump queries are scoped to the bookmark's own session; when that
+  session is not mounted yet `sessionRoot` returns `null` so the caller waits
+  instead of acting on a stranger's DOM. The client injects the `sessions`
+  service to read the session snapshot's `openState`.
 - **Rail-driven jump** (`railHandle`, `jumpViaRail`): find the `TurnNavigator`
   fiber (props `{items, onNavigate, activeTurn}`) up to 30 levels up and call
   `onNavigate(item)` directly. Clicking/scrolling the rail as a second writer
@@ -102,15 +109,37 @@ scroll events.**
   `jumpInFlight` for the whole request so a concurrent re-pin cannot cancel
   ChatView's pending navigation; it waits up to 60 s for the landed row and
   returns a reason (`not-in-items`, `threw`, `no-handle`, `aborted`, `no-landing`).
-- **`jumpToTurn`**: fast path via `settleOn` when the row is already mounted;
-  otherwise `jumpViaRail`, with a legacy pager fallback **only** when the rail
-  reports `no-handle`. Phase 1 pages older history (up to 240 iterations, 20 s
-  no-progress wall clock) by nudging `scrollTop` 1→0 to trigger history
-  consumption and clicking "load older"; Phase 2 bisects the scrollport with
-  `JUMP_PROBES = 48` plus a near sweep.
+- **`jumpToTurn`**: first waits (wall clock, 30 s) for the Chat flow to mount,
+  consulting `openState` (a huge transcript stays `loading` with no flow in the
+  DOM) and reporting `still-loading` at the deadline. Fast path via `settleOn`
+  when the row is already mounted; otherwise `jumpViaRail`, with a legacy pager
+  fallback **only** when the rail reports `no-handle`. Phase 1 pages older
+  history (up to 240 iterations, 20 s no-progress wall clock) by nudging
+  `scrollTop` 1→0 to trigger history consumption and clicking "load older";
+  Phase 2 bisects the scrollport with `JUMP_PROBES = 48` plus a near sweep.
+  The mount wait is wall-clock based (an earlier 180-frame budget expired on a
+  7.8M-token session), and a cached scrollport is re-resolved each phase because
+  a stale node silently ignores writes.
 - **Text-range bookmarks** use the CSS Custom Highlight API
   (`makeHighlight`/`CSS.highlights`) and are repainted on a slow poll plus
-  scroll, because the transcript virtualizes its rows.
+  scroll, because the transcript virtualizes its rows. For a text bookmark the
+  turn-row centring is skipped (`landTurn=false`) so the passage owns the single
+  visible motion. `findQuoteInTurn`/`locateQuoteByText` prefer the stored node's
+  kind+step when matching a quote, so a re-keyed node or a short quote that also
+  appears in a reasoning node lands on the right paragraph.
+- **Quoted-passage centring** (`revealQuotedNode` → `centrePassage`): landing on
+  the Turn is not landing on the quote — one Turn of a large session is itself
+  dozens of screens tall. The reader's anchor is snapshotted around the walk and
+  restored afterwards; `centrePassage` walks one screen at a time while it keeps
+  making progress, bounded by wall-clock time and a stall detector (eight
+  non-moving writes), not by a step count. When the passage is still missing,
+  DSH's own navigation (`jumpViaRail` → `navigateToTurn` → `loadThrough(seq)`)
+  pages through that Turn and the walk is retried, up to four rounds. The
+  success toast is only shown when the passage walk actually succeeded;
+  otherwise it says the quoted passage is not loaded yet.
+- **UI polish**: notes render in full (`pre-wrap`) and the note editor grows up
+  to `min(40vh, 240px)` then scrolls; light-theme surfaces use a `--bm-*` token
+  bridge so cards stay distinct against DSH's equal-value base layers.
 
 ### Follow-tail guard (`startFollowGuard`)
 

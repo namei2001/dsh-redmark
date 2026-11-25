@@ -28,11 +28,20 @@ For a fresh install, load the project folder as a local bundle.
 
 Click a bookmark to jump to its turn. The engine:
 
+- scopes every query to the target session (`[data-conversation-session="<id>"]`)
+  so a cross-session jump never lands in the wrong conversation;
+- waits for a huge session to reach `openState === 'open'` (up to 30 s wall clock)
+  instead of giving up while the Chat flow is still unmounted;
 - reuses DSH's own scroll anchors (`Plan C`) and navigation rail rather than
   writing scroll positions itself;
 - pages in older history if the turn is not yet mounted (up to 240 pages, with
   a 20 s no-progress guard);
 - bisects the scrollport to land precisely on the target turn row;
+- for a **text** bookmark, skips the turn-row centring and walks the scrollport
+  to the quoted passage instead. The walk is progress-bounded (wall clock plus a
+  stall detector), and it alternates with paging up to four rounds so a passage
+  deep inside a huge Turn is reachable in one click. Landing on the Turn alone
+  is never reported as a successful jump if the quote walk failed;
 - repaints text-range highlights until the virtualized row is present.
 
 If you deliberately scroll during a jump or switch sessions, the jump aborts
@@ -99,8 +108,23 @@ paint: session=... painted=0 missing=0 supported=true
 ```
 
 These confirm find/range scanning, turn alignment (`align ok=true`), step
-navigation, and highlight painting. Backups of earlier tuning rounds are kept
-next to the live log as `dsh-redmark-trace.log.bak-*`.
+navigation, and highlight painting.
+
+For jumps into large or still-loading sessions and to text bookmarks:
+
+```
+jump: root gate openState=open flow=true root=true mounted=session-abc|session-def
+jump: turn=63 ok=true pages=8 reason=- kind=text key=14:assistant-step68:76
+jump: quote centred ok=true reason=- steps=214 turn=63 key=14:assistant-step68:76
+jump: quote not mounted (reason=el) turn=63 round=1, asking the rail to load through it
+```
+
+`root gate` shows the session snapshot's `openState` and which sessions are
+currently mounted. `quote centred ok=true` means the walk reached the passage;
+`ok=false` with `reason=stuck` (scrollport clamped) or `budget` means the reader
+should scroll a little into that Turn and click again. `reason=text-missing`
+means the stored quote no longer exists. Backups of earlier tuning rounds are
+kept next to the live log as `dsh-redmark-trace.log.bak-*`.
 
 ## Verification commands
 

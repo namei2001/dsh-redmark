@@ -6,7 +6,7 @@
 [English](README.md) · [中文](README.zh-CN.md)
 
 [![CI](https://github.com/namei2001/dsh-redmark/actions/workflows/ci.yml/badge.svg)](https://github.com/namei2001/dsh-redmark/actions)
-![Version](https://img.shields.io/badge/version-4.0.0-blue)
+![Version](https://img.shields.io/badge/version-4.0.9-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-DSH%20Web%20Bundle-orange)
@@ -41,9 +41,9 @@
 | 功能 | 说明 |
 | --- | --- |
 | 轮次书签 | 在消息工具栏（order 40）为助手回复打点，记录 `turn` / `seq` / 备注 |
-| 文本区间书签 | 基于 CSS Custom Highlight API 高亮选区，保存 quote、偏移、前后文 |
+| 文本区间书签 | 基于 CSS Custom Highlight API 高亮选区，保存 quote、偏移、前后文；落在引用段落而非整轮 |
 | 专用书签面板 | `sidebar.panellist` + 主面板 + 右栏标签，多入口打开 |
-| 精准跳回 | 复用 DSH 自身滚动锚点（Plan C）与 TurnNavigator 导航轨，不写伪造滚动事件 |
+| 精准跳回 | 查询按会话隔离 + 复用 DSH 自身滚动锚点（Plan C）与 TurnNavigator 导航轨，不写伪造滚动事件；支持超大/仍在加载的会话 |
 | 会话内查找 | `Ctrl/Cmd+F` 捕获阶段快捷键，不抢占输入框，支持高亮与逐步导航 |
 | 跟随守卫 | 窄条件修复“无意图掉跟随”，尊重读者主动滚动，带 200 次修复上限 |
 | 尽力持久化 | `localStorage` 为主，Host `/dsh-redmark` 端点做可选 JSON 镜像 |
@@ -56,7 +56,7 @@
 ```json
 {
   "name": "@local/dsh-redmark",
-  "version": "4.0.0",
+  "version": "4.0.9",
   "type": "module",
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
@@ -138,7 +138,9 @@ cmd /c mklink /J "$link" "$repo"
 
 - `railTurnOf` 改为读取 `aria-label` 的**末尾数字**——本地化标签里可能含别的数字，整体匹配会让所有跨轮跳转失效。
 - 通过 React fiber 找到 `TurnNavigator` 的 `onNavigate(item)` 直接调用，不再点击/滚动导航轨（两个写入源导致抖动）；`jumpViaRail` 全程占用 `jumpInFlight`，避免并发 re-pin 取消 DSH 的待处理跳转。
-- `jumpToTurn` 优先 DSH 自身滚动锚点（Plan C，`save(null)` 回到底部、`save(position)` 固定），仅在无 rail 句柄时回退旧分页器；必要时分页加载最多 240 页，再以 48 探针二分滚动视口精准落位。
+- `jumpToTurn` 优先 DSH 自身滚动锚点（Plan C，`save(null)` 回到底部、`save(position)` 固定），仅在无 rail 句柄时回退旧分页器；必要时分页加载最多 240 页，再以 48 探针二分滚动视口精准落位。所有查询按目标会话隔离（`[data-conversation-session="<id>"]`），跨会话跳转不再落到错误的会话。
+- **文本书签落在段落而非整轮行。** 跳转仍翻页让该轮挂载，但跳过整轮居中；`revealQuotedNode` 再逐屏走到引用段落。存储节点的 kind+step 用于区分同样出现在推理节点中的短引用，读取前后会快照并恢复读者滚动锚点。
+- **超大 / 仍在加载的会话。** 挂载等待改为 30 秒墙钟期限，并读取会话快照的 `openState`（加载中时 shell 不挂载 Chat flow）；到期限仍在加载则给出专门的“仍在加载”提示。段落走位改为按进度推进并带停滞检测，代替原先固定 12 屏上限——多屏长轮中的书签现在一次点击即可到达引用段落。翻页与走位交替最多四轮，成功提示以段落走位结果为准。
 
 **诊断样例**（摘自真实 trace，说明机制已生效）：
 
@@ -177,6 +179,8 @@ Get-Content "$env:USERPROFILE\.dsh\dsh-redmark-trace.log" -Tail 120
 | 跳转不准 | `reveal align ok=false` / `no-landing` | 确认 rail 句柄存在、未切换会话 |
 | 又出现滑动回退 | `guard drop` 中 `intentless=false` | 属读者主动滚动，守卫正确放行，无需处理 |
 | 反复重固定 | 出现 `guard: repair cap reached (200)` | 已自动停止干预，重载 DSH 复位 |
+| “仍在加载”提示 | `jump: root gate` 中 `openState=loading` | 超大会话尚未打开；等待加载完成后再点一次 |
+| “引用段落未加载” | `jump: quote centred ok=false` | 走位已到边界；向该轮稍作滚动让段落绘制，或再点一次加载更多历史 |
 | 镜像未生效 | 日志无 route / `durable=false` | 仅影响跨浏览器恢复，`localStorage` 仍可用 |
 
 详见 [docs/usage.md](docs/usage.md) 的“读取诊断日志”。
@@ -198,8 +202,8 @@ $proj = "C:\Users\EDY\Documents\deepseek-harness\default-workspace\dsh-redmark"
 预期输出：
 
 ```
-Bundle check OK: @local/dsh-redmark@4.0.0
-# 7 tests passed
+Bundle check OK: @local/dsh-redmark@4.0.9
+# 8 tests passed
 ```
 
 > `--experimental-test-isolation=none` 仅 DSH 沙箱需要：默认测试隔离的子进程 spawn 会被沙箱以 `Error: spawn EPERM` 拒绝。普通 CI（`node --test test/*.test.js`）不需要该参数。
@@ -210,6 +214,9 @@ CI（GitHub Actions, Node 20）在推送/PR 时自动执行 `scripts/check-bundl
 
 **Q：为什么没有 `pyproject.toml` / `src/` / `Dockerfile`？**
 A：这是 DSH Cordis **JS bundle**，不是 Python 服务。等价物是 `package.json`、根目录 `index.js`/`client.js`；插件运行在 DSH 桌面进程内，不需要容器。
+
+**Q：跳进超大会话时提示“仍在加载”/引用段落不显示？**
+A：shell 在会话加载完成（`openState === 'open'`）前不挂载 Chat flow。dsh-redmark 现在最多等待 30 秒；到期限仍在加载则提示，稍候再点一次即可。文本书签使用按进度推进的段落走位（外加最多四轮翻页），多数情况下一次点击即可到达超长轮次深处的段落；若提示引用段落未加载，向该轮稍作滚动让段落绘制后再点一次。
 
 **Q：删了 trace 日志会丢书签吗？**
 A：不会。书签在 `localStorage`（+ 可选 JSON 镜像），日志只用于诊断。
