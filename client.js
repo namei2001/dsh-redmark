@@ -1532,13 +1532,16 @@ window.__ModuleLoader__.load({
 
       /* The Chat flow has to be the mounted view before any of this means
        * anything; a heavy transcript can take a while to replace the previous
-       * view, so the wait is generous rather than a fixed guess. */
+       * view, so the wait is generous rather than a fixed guess. A frame count
+       * of 180 (≈3s) timed out on a 7.8M-token session whose flow took longer
+       * than that to mount — wait on wall-clock time instead. */
       let scroller = null
       let waited = 0
-      for (let i = 0; i < 180 && scroller === null; i++) {
+      const scrollerDeadline = Date.now() + 15000
+      while (scroller === null && Date.now() < scrollerDeadline) {
         await frame()
         scroller = findScroller(sessionId)
-        waited = i + 1
+        waited += 1
       }
       if (scroller === null) {
         trace('no scroller after ' + waited + ' frames, flow=' + (q(CHAT_FLOW_SELECTOR, sessionId) !== null))
@@ -3502,8 +3505,11 @@ const ICON_PATHS = {
      * virtualizer mounts it. `null` means the quote could not be resolved. */
     async function revealQuotedNode(bm, sessionId) {
       if (!bm || bm.kind !== 'text' || !bm.nodeKey) return null
-      const deadline = Date.now() + 2500
-      for (let i = 0; i < 90 && Date.now() < deadline; i += 1) {
+      /* A very large session virtualises hard: the quoted row may only be
+       * painted several seconds after the flow mounts, so the deadline has to
+       * outlast the mount wait, not just the paint of an already-loaded view. */
+      const deadline = Date.now() + 8000
+      for (let i = 0; i < 240 && Date.now() < deadline; i += 1) {
         const el = nodeElByKey(sessionId, bm.nodeKey)
         if (el) {
           const scroller = findScroller(sessionId)
@@ -3588,7 +3594,11 @@ const ICON_PATHS = {
     }
 
     async function jumpInPlace(turn, sessionId, seq, bm) {
-      for (let i = 0; i < 300; i += 1) {
+      /* A 7.8M-token session can take well over the old 150 frames (≈2.5s) to
+       * mount after `openSession`; wait on wall-clock time here too, or the
+       * jump gives up before the target conversation even exists in the DOM. */
+      const rootDeadline = Date.now() + 15000
+      while (Date.now() < rootDeadline) {
         if (sessionRoot(sessionId) && findScroller(sessionId)) break
         await frame()
       }

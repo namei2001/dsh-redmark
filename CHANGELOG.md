@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.6] - 2026-11-25
+
+### Fixed
+- Jumping into a very large session no longer fails with `[no-scroller]`. The
+  Chat-flow wait was a 180-frame (≈3s) budget, which a 7.8M-token session blew
+  past while mounting, so the jump gave up before the conversation existed in
+  the DOM. The mount waits (`jumpToTurn`, `jumpInPlace`) now use a 15-second
+  wall-clock deadline, and the quoted-passage wait in `revealQuotedNode` is
+  extended to 8s / 240 frames to outlast a hard-virtualised mount.
+
 ## [4.0.5] - 2026-11-25
 
 ### Fixed
