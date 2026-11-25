@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.2] - 2026-11-25
+
+### Fixed
+- Light theme no longer reads as blank paper. DSH paints `--dsw-alias-bg-base`,
+  `bg-layer-1` and `bg-layer-2` with the same white in the light theme, so cards
+  separated only by a 4% hairline disappeared against the page. Surfaces now come
+  from a `--bm-*` bridge: a sunken `bg-module-platform` canvas behind grouped
+  containers, white cards with a `border-l2` hairline and the house
+  `--dsw-shadow-lv1` lift, and `bg-module-platform` fields for inputs and selects.
+- Hover fills no longer vanish in the light theme. Rules that used
+  `--dsw-alias-bg-layer-2` (white there) now use `--bm-hover-bg` / `--bm-item-hover-bg`.
+- The note popover keeps its frosted look in both themes: light mixes
+  `bg-overlay` at 88% with a white gradient and `blur(10px)`, dark keeps the
+  original 50% mix and `blur(4px)`.
+
+### Changed
+- The dark theme is untouched by the surface bridge: every `--bm-*` token falls
+  back to the previous value, so only the light theme changed appearance
+  (verified by pixel diff: dark 0.055% changed, light 10.8% changed).
+
 ## [4.0.1] - 2026-11-25
 
 ### Fixed
